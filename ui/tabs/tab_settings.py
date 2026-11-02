@@ -52,8 +52,13 @@ class TabSettings(QWidget):
         log_layout.addLayout(log_btn_bar)
 
         layout.addWidget(group_log, stretch=1)
+        self._status_loaded = False
 
-        self._refresh_status()
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._status_loaded:
+            self._refresh_status()
+            self._status_loaded = True
 
     def _refresh_status(self):
         # 刷新工具表格

@@ -8,7 +8,11 @@ class ToolManager:
     """管理并定位 FFmpeg, FFprobe, FFplay, ExifTool 二进制工具"""
     
     def __init__(self):
-        self.script_dir = Path(__file__).resolve().parent.parent
+        if getattr(sys, "frozen", False):
+            self.app_dir = Path(sys.executable).parent
+        else:
+            self.app_dir = Path(__file__).resolve().parent.parent
+
         self.tools = {
             "ffmpeg": self._find_tool("ffmpeg"),
             "ffprobe": self._find_tool("ffprobe"),
@@ -16,15 +20,17 @@ class ToolManager:
             "exiftool": self._find_tool("exiftool")
         }
         self.versions = {}
-        self._detect_versions()
+        # 优化：启动时不阻塞运行外部命令，仅在使用时按需延迟探测
+        self._versions_detected = False
 
     def _find_tool(self, name: str) -> str:
         exe_name = f"{name}.exe" if os.name == 'nt' else name
         
-        # 1. 优先检查当前程序工作目录及其上级目录
+        # 1. 优先检查当前程序工作目录、安装目录及其上级目录
         candidates = [
-            self.script_dir / exe_name,
-            self.script_dir.parent / exe_name,
+            self.app_dir / exe_name,
+            self.app_dir.parent / exe_name,
+            self.app_dir.parent.parent / exe_name,
             Path.cwd() / exe_name
         ]
         for c in candidates:
@@ -62,11 +68,14 @@ class ToolManager:
         return bool(path and os.path.exists(path))
 
     def get_status_dict(self) -> dict:
+        if not self._versions_detected:
+            self._detect_versions()
+            self._versions_detected = True
         return {
             name: {
                 "available": self.is_available(name),
                 "path": self.get_path(name),
-                "version": self.versions.get(name, "未知")
+                "version": self.versions.get(name, "已就绪")
             }
             for name in self.tools
         }

@@ -15,6 +15,7 @@ venv/
 exiftool_files/
 
 # Media & Outputs
+.hardware_cache.json
 output_1080p/
 output_cut/
 output_split/
