@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+# Binaries & Large Tools
+*.exe
+*.dll
+exiftool_files/
+
+# Media & Outputs
+output_1080p/
+output_cut/
+output_split/
+test_output/
+*.mp4
+*.MP4
+*.mkv
+*.mov
+*.avi
+*.flv
+
+# PyInstaller & Build
+build/
+dist/
+*.spec
