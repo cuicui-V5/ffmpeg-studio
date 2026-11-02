@@ -4,12 +4,14 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from pathlib import Path
 
 class DropArea(QFrame):
-    """文件/文件夹拖拽容器"""
+    """文件/文件夹拖拽容器 (支持点击打开选择器与拖拽)"""
     files_dropped = Signal(list)  # list[str]
+    clicked = Signal()
 
-    def __init__(self, title: str = "拖入视频文件或文件夹至此处", subtitle: str = "支持多选拖拽 / 自动扫描"):
+    def __init__(self, title: str = "拖入视频文件或文件夹至此处", subtitle: str = "支持多选拖拽 / 点击直接浏览"):
         super().__init__()
         self.setAcceptDrops(True)
+        self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("dropArea")
 
         layout = QVBoxLayout(self)
@@ -74,3 +76,8 @@ class DropArea(QFrame):
         self.dragLeaveEvent(None)
         if paths:
             self.files_dropped.emit(paths)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)

@@ -48,6 +48,7 @@ class TabCutter(QWidget):
         self.player_widget = VideoPlayerWidget()
         self.player_widget.mark_in_clicked.connect(self._on_player_mark_in)
         self.player_widget.mark_out_clicked.connect(self._on_player_mark_out)
+        self.player_widget.range_changed.connect(self._on_player_range_changed)
         player_layout.addWidget(self.player_widget)
         splitter.addWidget(player_container)
 
@@ -144,9 +145,13 @@ class TabCutter(QWidget):
         layout.addWidget(splitter, stretch=1)
 
         # 拖拽支持
-        self.drop_area = DropArea(title="拖拽单个视频文件到这里立即开始预览与裁切")
+        self.drop_area = DropArea(
+            title="拖拽单个视频文件到这里 (或点击浏览) 立即开始预览与裁切",
+            subtitle="自动分析关键帧并载入播放器时间轴"
+        )
         self.drop_area.setFixedHeight(75)
         self.drop_area.files_dropped.connect(self._on_dropped_file)
+        self.drop_area.clicked.connect(self._choose_video_file)
         layout.addWidget(self.drop_area)
 
     def _choose_video_file(self):
@@ -196,9 +201,24 @@ class TabCutter(QWidget):
 
     def _on_player_mark_in(self, seconds: float):
         self.edit_start.setText(KeyframeHelper.format_time(seconds))
+        e_sec = KeyframeHelper.parse_time(self.edit_end.text()) or self.total_duration
+        self.player_widget.range_slider.set_values(seconds, e_sec)
+        self._update_snap_preview()
 
     def _on_player_mark_out(self, seconds: float):
         self.edit_end.setText(KeyframeHelper.format_time(seconds))
+        s_sec = KeyframeHelper.parse_time(self.edit_start.text()) or 0.0
+        self.player_widget.range_slider.set_values(s_sec, seconds)
+        self._update_snap_preview()
+
+    def _on_player_range_changed(self, in_sec: float, out_sec: float):
+        self.edit_start.blockSignals(True)
+        self.edit_end.blockSignals(True)
+        self.edit_start.setText(KeyframeHelper.format_time(in_sec))
+        self.edit_end.setText(KeyframeHelper.format_time(out_sec))
+        self.edit_start.blockSignals(False)
+        self.edit_end.blockSignals(False)
+        self._update_snap_preview()
 
     def _update_snap_preview(self):
         if not self.current_file or not self.keyframes:
@@ -206,6 +226,11 @@ class TabCutter(QWidget):
 
         s_val = KeyframeHelper.parse_time(self.edit_start.text()) or 0.0
         e_val = KeyframeHelper.parse_time(self.edit_end.text()) or self.total_duration
+
+        # 同步更新滑块
+        self.player_widget.range_slider.blockSignals(True)
+        self.player_widget.range_slider.set_values(s_val, e_val)
+        self.player_widget.range_slider.blockSignals(False)
 
         if not self.chk_auto_snap.isChecked():
             self.lbl_snap_result.setText(f"吸附已关闭：将直接按精确时间截取")

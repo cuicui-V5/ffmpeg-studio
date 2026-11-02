@@ -81,10 +81,11 @@ class TabSplit(QWidget):
 
         # 3. 拖拽区域
         self.drop_area = DropArea(
-            title="拖入需要分段的视频或文件夹",
+            title="拖入需要分段的视频或文件夹 (或点击直接浏览)",
             subtitle="自动按设定规则计算最优切片时间与预计段数（采用 FFmpeg 极速流复制无损分割）"
         )
         self.drop_area.files_dropped.connect(self._handle_dropped_paths)
+        self.drop_area.clicked.connect(self._choose_files)
         layout.addWidget(self.drop_area)
 
         # 4. 预览表格
@@ -94,6 +95,8 @@ class TabSplit(QWidget):
         ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table.setCornerButtonEnabled(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
         layout.addWidget(self.table, stretch=1)
 
         # 5. 底部操作栏

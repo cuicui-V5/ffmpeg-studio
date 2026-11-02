@@ -109,6 +109,7 @@ class CompressItem:
 class BatchCompressWorker(QThread):
     """批量压制执行后台线程"""
     item_updated = Signal(int, str, float)   # (index, status, progress)
+    file_progress = Signal(str, float, float, str, str) # (filename, pct, fps, speed, eta_str)
     overall_progress = Signal(int, int)      # (finished_count, total_count)
     log_emitted = Signal(str)
     all_finished = Signal()
@@ -183,6 +184,10 @@ class BatchCompressWorker(QThread):
 
             # 异步执行并解析进度
             out_time_pattern = re.compile(r'time=(\d{2}):(\d{2}):(\d{2}\.\d+)')
+            fps_pattern = re.compile(r'fps=\s*([\d\.]+)')
+            speed_pattern = re.compile(r'speed=\s*([\d\.]+)x')
+            self.file_progress.emit(item.filename, 0.0, 0.0, "--", "--:--")
+
             try:
                 self._current_proc = subprocess.Popen(
                     cmd_ffmpeg,
@@ -198,12 +203,27 @@ class BatchCompressWorker(QThread):
                         break
                     line_str = line.strip()
                     m = out_time_pattern.search(line_str)
+                    fps_m = fps_pattern.search(line_str)
+                    spd_m = speed_pattern.search(line_str)
+
+                    cur_fps = float(fps_m.group(1)) if fps_m else 0.0
+                    cur_speed = f"{spd_m.group(1)}x" if spd_m else "--"
+
                     if m and item.duration > 0:
                         h, mn, s = float(m.group(1)), float(m.group(2)), float(m.group(3))
                         cur_sec = h * 3600 + mn * 60 + s
                         pct = min(99.0, max(0.0, (cur_sec / item.duration) * 100))
                         item.progress = pct
                         self.item_updated.emit(idx, item.status, pct)
+
+                        # 计算 ETA
+                        eta_str = "--:--"
+                        spd_val = float(spd_m.group(1)) if spd_m else 0.0
+                        if spd_val > 0.01:
+                            rem = max(0.0, item.duration - cur_sec) / spd_val
+                            eta_str = f"{int(rem // 60):02d}:{int(rem % 60):02d}"
+
+                        self.file_progress.emit(item.filename, pct, cur_fps, cur_speed, eta_str)
 
                 self._current_proc.wait()
 
@@ -276,6 +296,7 @@ class BatchCompressWorker(QThread):
             item.progress = 100.0
             finished_count += 1
             self.item_updated.emit(idx, item.status, 100.0)
+            self.file_progress.emit(item.filename, 100.0, 0.0, "--", "00:00")
             self.overall_progress.emit(finished_count, total)
             self.log_emitted.emit(f"✅ 处理成功: {item.output_path.name}")
 

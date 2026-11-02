@@ -53,29 +53,28 @@ class TabCompress(QWidget):
         self.combo_encoder = QComboBox()
         self._populate_encoders()
 
-        lbl_cq = QLabel("质量 (CQ):")
-        self.slider_cq = QSlider(Qt.Horizontal)
-        self.slider_cq.setRange(20, 36)
-        self.slider_cq.setValue(28)
-        self.slider_cq.setFixedWidth(100)
-        self.lbl_cq_val = QLabel("28")
-        self.slider_cq.valueChanged.connect(lambda v: self.lbl_cq_val.setText(str(v)))
+        lbl_cq = QLabel("画质预设:")
+        self.combo_quality = QComboBox()
+        self.combo_quality.addItem("高画质 (清晰度优先 - CQ 23)", 23)
+        self.combo_quality.addItem("标准均衡 (推荐 - CQ 28)", 28)
+        self.combo_quality.addItem("极小体积 (节约空间 - CQ 32)", 32)
+        self.combo_quality.setCurrentIndex(1) # 默认标准均衡
 
         top_bar.addWidget(lbl_enc)
         top_bar.addWidget(self.combo_encoder)
         top_bar.addSpacing(10)
         top_bar.addWidget(lbl_cq)
-        top_bar.addWidget(self.slider_cq)
-        top_bar.addWidget(self.lbl_cq_val)
+        top_bar.addWidget(self.combo_quality)
 
         layout.addLayout(top_bar)
 
         # 2. 拖拽区域
         self.drop_area = DropArea(
-            title="拖拽视频文件或整个文件夹到这里",
+            title="拖拽视频文件或整个文件夹到这里 (或点击直接浏览)",
             subtitle="自动递归扫描常见视频格式并读取 EXIF / GPS / 拍摄时间"
         )
         self.drop_area.files_dropped.connect(self._handle_dropped_paths)
+        self.drop_area.clicked.connect(self._choose_files)
         layout.addWidget(self.drop_area)
 
         # 3. 批量元数据快捷操作按钮栏
@@ -106,6 +105,7 @@ class TabCompress(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setCornerButtonEnabled(False)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.itemDoubleClicked.connect(self._on_item_double_clicked)
@@ -117,6 +117,24 @@ class TabCompress(QWidget):
         bottom_layout.setContentsMargins(12, 10, 12, 10)
         bottom_layout.setSpacing(8)
 
+        # 单文件处理进度
+        cur_layout = QVBoxLayout()
+        cur_header = QHBoxLayout()
+        self.lbl_cur_title = QLabel("当前文件: 等待开始")
+        self.lbl_cur_title.setStyleSheet("font-weight: bold; color: #00d2ff;")
+        self.lbl_cur_stats = QLabel("进度: 0.0%  |  速率: --  |  帧率: -- fps  |  预计剩余: --:--")
+        self.lbl_cur_stats.setStyleSheet("color: #abb2bf; font-family: Consolas, monospace; font-size: 12px;")
+        cur_header.addWidget(self.lbl_cur_title)
+        cur_header.addStretch()
+        cur_header.addWidget(self.lbl_cur_stats)
+        cur_layout.addLayout(cur_header)
+
+        self.prog_current = QProgressBar()
+        self.prog_current.setValue(0)
+        cur_layout.addWidget(self.prog_current)
+        bottom_layout.addLayout(cur_layout)
+
+        # 总任务进度
         prog_layout = QHBoxLayout()
         self.lbl_overall = QLabel("总进度: 0 / 0")
         self.lbl_overall.setStyleSheet("font-weight: bold;")
@@ -267,6 +285,9 @@ class TabCompress(QWidget):
         self.table.setRowCount(0)
         self.lbl_overall.setText("总进度: 0 / 0")
         self.prog_overall.setValue(0)
+        self.prog_current.setValue(0)
+        self.lbl_cur_title.setText("当前文件: 等待开始")
+        self.lbl_cur_stats.setText("进度: 0.0%  |  速率: --  |  帧率: -- fps  |  预计剩余: --:--")
 
     def _batch_fill_gps(self):
         text, ok = QInputDialog.getText(
@@ -361,7 +382,7 @@ class TabCompress(QWidget):
             return
 
         encoder_key = self.combo_encoder.currentData()
-        cq_val = self.slider_cq.value()
+        cq_val = self.combo_quality.currentData()
 
         self.btn_start.setEnabled(False)
         self.btn_cancel.setEnabled(True)
@@ -369,6 +390,7 @@ class TabCompress(QWidget):
 
         self.worker = BatchCompressWorker(self.items, encoder=encoder_key, cq=cq_val)
         self.worker.item_updated.connect(self._on_item_updated)
+        self.worker.file_progress.connect(self._on_file_progress)
         self.worker.overall_progress.connect(self._on_overall_progress)
         self.worker.all_finished.connect(self._on_all_finished)
         self.worker.start()
@@ -377,6 +399,11 @@ class TabCompress(QWidget):
         if self.worker:
             self.lbl_status_desc.setText("正在中止当前任务...")
             self.worker.cancel()
+
+    def _on_file_progress(self, filename: str, pct: float, fps: float, speed: str, eta_str: str):
+        self.lbl_cur_title.setText(f"当前处理: {filename}")
+        self.prog_current.setValue(int(pct))
+        self.lbl_cur_stats.setText(f"进度: {pct:.1f}%  |  速率: {speed}  |  帧率: {fps:.0f} fps  |  预计剩余: {eta_str}")
 
     def _on_item_updated(self, idx: int, status: str, pct: float):
         if 0 <= idx < self.table.rowCount():
@@ -392,6 +419,8 @@ class TabCompress(QWidget):
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.lbl_status_desc.setText("🎉 批量任务全部完成！")
+        self.prog_current.setValue(100)
+        self.lbl_cur_title.setText("当前文件: 全部处理完毕")
         QMessageBox.information(self, "完成", "批量压制与元数据注入任务已全部处理完成！")
 
     def _open_output_dir(self):
