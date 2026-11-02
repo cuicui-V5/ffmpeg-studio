@@ -69,9 +69,10 @@ class CompressItem:
             return
 
         # 1. 探测 GPS
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             cmd = [tool_exif, '-j', '-n', '-GPSLatitude', '-GPSLongitude', str(self.filepath)]
-            res = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, errors='ignore')
+            res = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, errors='ignore', creationflags=creationflags)
             data = json.loads(res)[0]
             if 'GPSLatitude' in data and 'GPSLongitude' in data:
                 self.final_lat = float(data['GPSLatitude'])
@@ -86,7 +87,7 @@ class CompressItem:
                 tool_exif, '-api', 'QuickTimeUTC=1', '-j',
                 '-CreateDate', '-MediaCreateDate', '-DateTimeOriginal', str(self.filepath)
             ]
-            res = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, errors='ignore')
+            res = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, errors='ignore', creationflags=creationflags)
             data = json.loads(res)[0]
             for tag in ['DateTimeOriginal', 'CreateDate', 'MediaCreateDate']:
                 if tag in data and data[tag]:
@@ -188,6 +189,7 @@ class BatchCompressWorker(QThread):
             speed_pattern = re.compile(r'speed=\s*([\d\.]+)x')
             self.file_progress.emit(item.filename, 0.0, 0.0, "--", "--:--")
 
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             try:
                 self._current_proc = subprocess.Popen(
                     cmd_ffmpeg,
@@ -195,7 +197,8 @@ class BatchCompressWorker(QThread):
                     stderr=subprocess.STDOUT,
                     text=True,
                     errors='ignore',
-                    bufsize=1
+                    bufsize=1,
+                    creationflags=creationflags
                 )
 
                 for line in self._current_proc.stdout:
@@ -288,7 +291,7 @@ class BatchCompressWorker(QThread):
                     str(item.output_path)
                 ])
 
-                ret = subprocess.run(cmd_exif, capture_output=True, text=True, errors='ignore')
+                ret = subprocess.run(cmd_exif, capture_output=True, text=True, errors='ignore', creationflags=creationflags)
                 if ret.returncode != 0:
                     self.log_emitted.emit(f"⚠️ ExifTool 提示: {ret.stderr.strip() or ret.stdout.strip()}")
 

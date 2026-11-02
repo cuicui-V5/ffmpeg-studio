@@ -1,6 +1,5 @@
 import os
 import sys
-import av
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -184,6 +183,7 @@ class VideoPlayerWidget(QWidget):
 
         self.current_file = file_path
         try:
+            import av
             self.container = av.open(file_path)
             self.video_stream = self.container.streams.video[0]
             self.video_stream.thread_type = 'AUTO'

@@ -86,13 +86,15 @@ class CutterWorker(QThread):
         ]
 
         self.log_emitted.emit(f"🚀 开始极速裁切 (流复制模式)...")
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             self._proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                errors='ignore'
+                errors='ignore',
+                creationflags=creationflags
             )
             out, _ = self._proc.communicate()
             if self._proc.returncode == 0:

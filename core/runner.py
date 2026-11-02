@@ -43,7 +43,8 @@ class CommandWorker(QThread):
         full_cmd_str = " ".join(f'"{c}"' if " " in c else c for c in self.cmd)
         self.log_received.emit(f"[EXEC] {full_cmd_str}\n")
 
-        # 启动进程
+        # 启动进程 (Windows 下使用 CREATE_NO_WINDOW 杜绝任何黑框弹窗)
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             self.process = subprocess.Popen(
                 self.cmd,
@@ -51,7 +52,8 @@ class CommandWorker(QThread):
                 stderr=subprocess.STDOUT,
                 text=True,
                 errors="ignore",
-                bufsize=1
+                bufsize=1,
+                creationflags=creationflags
             )
         except Exception as e:
             self.task_finished.emit(False, f"启动进程失败: {e}")

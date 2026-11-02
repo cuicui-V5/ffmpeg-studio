@@ -2,8 +2,15 @@ import os
 import json
 import bisect
 import subprocess
-import av
 from core.tool_manager import tool_mgr
+
+def _get_av():
+    """按需延迟加载 PyAV，避免应用启动时初始化数十个底层 C-FFmpeg 动态库造成数百毫秒启动阻塞"""
+    try:
+        import av
+        return av
+    except Exception:
+        return None
 
 class KeyframeHelper:
     """提取视频关键帧并执行高精度的关键帧吸附对齐算法（杜绝剪辑黑屏/花屏）"""
@@ -50,30 +57,32 @@ class KeyframeHelper:
             return {}
 
         # 1. 优先使用 PyAV 直接解析容器 Header (毫秒级响应)
-        try:
-            with av.open(file_path) as container:
-                stream = container.streams.video[0]
-                dur = float(container.duration / 1000000.0) if container.duration else 0.0
-                if dur <= 0 and stream.duration:
-                    dur = float(stream.duration * stream.time_base)
-                
-                r_fps = stream.average_rate
-                fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
+        av_module = _get_av()
+        if av_module:
+            try:
+                with av_module.open(file_path) as container:
+                    stream = container.streams.video[0]
+                    dur = float(container.duration / 1000000.0) if container.duration else 0.0
+                    if dur <= 0 and stream.duration:
+                        dur = float(stream.duration * stream.time_base)
+                    
+                    r_fps = stream.average_rate
+                    fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
 
-                return {
-                    "file_path": file_path,
-                    "duration": dur,
-                    "size": os.path.getsize(file_path),
-                    "bit_rate": int(container.bit_rate) if container.bit_rate else 0,
-                    "width": stream.width,
-                    "height": stream.height,
-                    "codec": stream.codec_context.name,
-                    "fps": round(fps, 2)
-                }
-        except Exception:
-            pass
+                    return {
+                        "file_path": file_path,
+                        "duration": dur,
+                        "size": os.path.getsize(file_path),
+                        "bit_rate": int(container.bit_rate) if container.bit_rate else 0,
+                        "width": stream.width,
+                        "height": stream.height,
+                        "codec": stream.codec_context.name,
+                        "fps": round(fps, 2)
+                    }
+            except Exception:
+                pass
 
-        # 2. 回退机制：使用 ffprobe
+        # 2. 回退机制：使用 ffprobe (无窗口执行)
         ffprobe = tool_mgr.get_path("ffprobe")
         if not ffprobe:
             return {}
@@ -83,8 +92,16 @@ class KeyframeHelper:
             "-show_entries", "format=duration,size,bit_rate:stream=width,height,codec_name,r_frame_rate,duration",
             "-of", "json", file_path
         ]
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
-            ret = subprocess.run(cmd, capture_output=True, text=True, errors="ignore", timeout=8)
+            ret = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                errors="ignore",
+                timeout=8,
+                creationflags=creationflags
+            )
             if ret.returncode != 0 or not ret.stdout:
                 return {}
             data = json.loads(ret.stdout)
@@ -153,7 +170,7 @@ class KeyframeHelper:
 
     @classmethod
     def get_keyframes(cls, file_path: str) -> list[float]:
-        """异步/后台使用的全量关键帧读取"""
+        """异步/后台使用的全量关键帧读取 (完全静默执行)"""
         if file_path in cls._cache:
             return cls._cache[file_path]
 
@@ -170,9 +187,17 @@ class KeyframeHelper:
             file_path
         ]
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         keyframes = []
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="ignore",
+                creationflags=creationflags
+            )
             for line in proc.stdout:
                 parts = line.strip().split(',')
                 if len(parts) >= 2 and 'K' in parts[1]:

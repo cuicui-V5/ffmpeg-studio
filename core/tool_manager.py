@@ -45,17 +45,32 @@ class ToolManager:
         return ""
 
     def _detect_versions(self):
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         for name, path in self.tools.items():
             if not path or not os.path.exists(path):
                 self.versions[name] = "未找到"
                 continue
             try:
                 if name in ["ffmpeg", "ffprobe", "ffplay"]:
-                    res = subprocess.run([path, "-version"], capture_output=True, text=True, errors="ignore")
+                    res = subprocess.run(
+                        [path, "-version"],
+                        capture_output=True,
+                        text=True,
+                        errors="ignore",
+                        creationflags=creationflags,
+                        timeout=2
+                    )
                     first_line = res.stdout.splitlines()[0] if res.stdout else ""
                     self.versions[name] = first_line.split("Copyright")[0].strip() if first_line else "已就绪"
                 elif name == "exiftool":
-                    res = subprocess.run([path, "-ver"], capture_output=True, text=True, errors="ignore")
+                    res = subprocess.run(
+                        [path, "-ver"],
+                        capture_output=True,
+                        text=True,
+                        errors="ignore",
+                        creationflags=creationflags,
+                        timeout=2
+                    )
                     self.versions[name] = f"v{res.stdout.strip()}" if res.stdout else "已就绪"
             except Exception:
                 self.versions[name] = "已就绪"

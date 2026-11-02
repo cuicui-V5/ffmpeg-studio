@@ -5,7 +5,7 @@ cd /d "%~dp0"
 REM 1. 优先极速启动已编译的高性能独立程序 (毫秒级秒开，无黑框)
 if exist "dist\FFmpegStudio\FFmpegStudio.exe" (
     start "" "dist\FFmpegStudio\FFmpegStudio.exe"
-    exit /b 0
+    exit
 )
 
 REM 2. 回退模式：使用 pythonw 启动无控制台窗口模式
@@ -15,3 +15,4 @@ if errorlevel 1 (
     python gui_main.py
     pause
 )
+exit

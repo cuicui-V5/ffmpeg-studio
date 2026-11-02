@@ -149,13 +149,15 @@ class BatchSplitWorker(QThread):
                     output_pattern
                 ]
 
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 try:
                     self._proc = subprocess.Popen(
                         cmd,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
-                        errors='ignore'
+                        errors='ignore',
+                        creationflags=creationflags
                     )
                     out, _ = self._proc.communicate()
 

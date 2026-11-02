@@ -82,7 +82,9 @@ class MainWindow(QMainWindow):
             self.tab_split._handle_dropped_paths(paths)
 
     def closeEvent(self, event):
-        # 确保关闭窗口时停止播放器
+        # 确保关闭窗口时停止播放器与后台诊断线程
         if hasattr(self.tab_cutter, "player_widget"):
             self.tab_cutter.player_widget.close()
+        if hasattr(self.tab_settings, "_worker") and self.tab_settings._worker and self.tab_settings._worker.isRunning():
+            self.tab_settings._worker.wait(1000)
         event.accept()
