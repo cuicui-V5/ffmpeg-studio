@@ -13,7 +13,6 @@ from PySide6.QtGui import QColor
 from core.tasks.split_task import PRESETS, SplitPlan, BatchSplitWorker
 from core.keyframe_helper import KeyframeHelper
 from core.tasks.compress_task import EXTENSIONS
-from ui.components.drop_area import DropArea
 
 class TabSplit(QWidget):
     """选项卡 3：平台限制智能分段 (QQ / 微信 / 社交媒体 / 自定义阈值)"""
@@ -80,16 +79,7 @@ class TabSplit(QWidget):
         btn_bar.addStretch()
         layout.addLayout(btn_bar)
 
-        # 3. 拖拽区域
-        self.drop_area = DropArea(
-            title="拖入需要分段的视频或文件夹 (或点击直接浏览)",
-            subtitle="自动按设定规则计算最优切片时间与预计段数（采用 FFmpeg 极速流复制无损分割）"
-        )
-        self.drop_area.files_dropped.connect(self._handle_dropped_paths)
-        self.drop_area.clicked.connect(self._choose_files)
-        layout.addWidget(self.drop_area)
-
-        # 4. 预览表格
+        # 3. 预览表格
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels([
             "文件名", "原始大小", "原始时长", "判定结果", "切片方案预估", "处理状态"

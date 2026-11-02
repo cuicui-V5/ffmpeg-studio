@@ -16,7 +16,6 @@ from core.tasks.compress_task import (
 from core.hardware import HardwareDetector
 from core.tool_manager import tool_mgr
 from core.keyframe_helper import KeyframeHelper
-from ui.components.drop_area import DropArea
 
 class TabCompress(QWidget):
     """选项卡 1：批量压制 1080p + 智能拍摄时间与 GPS 元数据补全"""
@@ -69,16 +68,7 @@ class TabCompress(QWidget):
 
         layout.addLayout(top_bar)
 
-        # 2. 拖拽区域
-        self.drop_area = DropArea(
-            title="拖拽视频文件或整个文件夹到这里 (或点击直接浏览)",
-            subtitle="自动递归扫描常见视频格式并读取 EXIF / GPS / 拍摄时间"
-        )
-        self.drop_area.files_dropped.connect(self._handle_dropped_paths)
-        self.drop_area.clicked.connect(self._choose_files)
-        layout.addWidget(self.drop_area)
-
-        # 3. 批量元数据快捷操作按钮栏
+        # 2. 批量元数据快捷操作按钮栏
         meta_bar = QHBoxLayout()
         meta_bar.setSpacing(8)
 
