@@ -23,6 +23,7 @@ class TabCompress(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.items: list[CompressItem] = []
         self.worker: BatchCompressWorker = None
 
@@ -170,6 +171,18 @@ class TabCompress(QWidget):
         bottom_layout.addLayout(action_layout)
 
         layout.addWidget(bottom_box)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        paths = [u.toLocalFile() for u in urls if u.toLocalFile()]
+        if paths:
+            self._handle_dropped_paths(paths)
 
     def _populate_encoders(self):
         support = HardwareDetector.detect_encoders()

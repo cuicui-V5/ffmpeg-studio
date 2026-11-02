@@ -1,23 +1,24 @@
 import os
+import time
 import subprocess
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QCheckBox, QGroupBox, QFileDialog,
-    QMessageBox, QSplitter, QFrame
+    QMessageBox, QSplitter, QFrame, QProgressBar
 )
 from PySide6.QtCore import Qt
 
 from core.tasks.cutter_task import CutterWorker
 from core.keyframe_helper import KeyframeHelper
 from ui.components.video_player import VideoPlayerWidget
-from ui.components.drop_area import DropArea
 
 class TabCutter(QWidget):
     """选项卡 2：极速视频裁切 + 内嵌播放预览 + 关键帧智能吸附（杜绝黑屏）"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.current_file = ""
         self.keyframes = []
         self.total_duration = 0.0
@@ -52,10 +53,12 @@ class TabCutter(QWidget):
         player_layout.addWidget(self.player_widget)
         splitter.addWidget(player_container)
 
-        # 右侧：裁切参数与关键帧指示器
+        # 右侧：裁切参数与控制
         control_card = QFrame()
-        control_card.setStyleSheet("background-color: #1e2025; border-radius: 6px; padding: 10px;")
+        control_card.setObjectName("cutterControlCard")
+        control_card.setStyleSheet("QFrame#cutterControlCard { background-color: #1e2025; border-radius: 6px; }")
         control_layout = QVBoxLayout(control_card)
+        control_layout.setContentsMargins(14, 14, 14, 14)
         control_layout.setSpacing(12)
 
         # 视频信息
@@ -97,62 +100,57 @@ class TabCutter(QWidget):
         out_layout.addWidget(btn_set_out)
         time_layout.addLayout(out_layout)
 
+        # 默认启用的关键帧对齐状态指示
+        self.lbl_snap_result = QLabel("⚡ 关键帧自动吸附已就绪 (首尾杜绝黑屏/花屏)")
+        self.lbl_snap_result.setStyleSheet("color: #00d2ff; font-weight: bold; font-family: Consolas; font-size: 12px;")
+        time_layout.addWidget(self.lbl_snap_result)
+
         control_layout.addWidget(group_time)
-
-        # 关键帧智能吸附卡片
-        group_snap = QGroupBox("智能关键帧对齐 (杜绝黑屏)")
-        snap_layout = QVBoxLayout(group_snap)
-        snap_layout.setSpacing(6)
-
-        self.chk_auto_snap = QCheckBox("启用关键帧自动吸附 (强烈推荐)")
-        self.chk_auto_snap.setChecked(True)
-        self.chk_auto_snap.stateChanged.connect(self._update_snap_preview)
-
-        self.lbl_snap_desc = QLabel(
-            "💡 原理：FFmpeg 极速裁切（流复制模式）必须从关键帧（I帧）开始解码，否则会产生黑屏/花屏。"
-            "开启吸附将自动把时间对齐到临近关键帧，保证秒级导出且画面第一帧完美流畅！"
-        )
-        self.lbl_snap_desc.setWordWrap(True)
-        self.lbl_snap_desc.setStyleSheet("color: #8a919e; font-size: 11px;")
-
-        self.lbl_snap_result = QLabel("吸附状态: 等待输入时间...")
-        self.lbl_snap_result.setStyleSheet("color: #00d2ff; font-weight: bold; font-family: Consolas;")
-
-        snap_layout.addWidget(self.chk_auto_snap)
-        snap_layout.addWidget(self.lbl_snap_desc)
-        snap_layout.addWidget(self.lbl_snap_result)
-        control_layout.addWidget(group_snap)
-
         control_layout.addStretch()
 
-        # 导出操作
-        action_layout = QVBoxLayout()
+        # 导出操作与独立单文件进度
+        action_box = QGroupBox("裁切执行与进度")
+        action_layout = QVBoxLayout(action_box)
+        action_layout.setSpacing(8)
+
+        self.lbl_cut_status = QLabel("就绪 (点击下方按钮极速导出)")
+        self.lbl_cut_status.setStyleSheet("color: #abb2bf; font-size: 12px;")
+
+        self.prog_cut = QProgressBar()
+        self.prog_cut.setValue(0)
+        self.prog_cut.setFixedHeight(18)
+
         self.btn_cut = QPushButton("⚡ 极速无损裁切 (毫秒级导出)")
         self.btn_cut.setObjectName("primaryBtn")
-        self.btn_cut.setFixedHeight(42)
+        self.btn_cut.setFixedHeight(40)
         self.btn_cut.clicked.connect(self._start_cut)
 
-        btn_open_folder = QPushButton("📂 打开输出目录 (默认同级 output_cut)")
-        btn_open_folder.clicked.connect(self._open_output_dir)
+        self.btn_open_folder = QPushButton("📂 打开输出目录 (默认同级 output_cut)")
+        self.btn_open_folder.setFixedHeight(34)
+        self.btn_open_folder.clicked.connect(self._open_output_dir)
 
+        action_layout.addWidget(self.lbl_cut_status)
+        action_layout.addWidget(self.prog_cut)
         action_layout.addWidget(self.btn_cut)
-        action_layout.addWidget(btn_open_folder)
-        control_layout.addLayout(action_layout)
+        action_layout.addWidget(self.btn_open_folder)
+        control_layout.addWidget(action_box)
 
         splitter.addWidget(control_card)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, stretch=1)
 
-        # 拖拽支持
-        self.drop_area = DropArea(
-            title="拖拽单个视频文件到这里 (或点击浏览) 立即开始预览与裁切",
-            subtitle="自动分析关键帧并载入播放器时间轴"
-        )
-        self.drop_area.setFixedHeight(75)
-        self.drop_area.files_dropped.connect(self._on_dropped_file)
-        self.drop_area.clicked.connect(self._choose_video_file)
-        layout.addWidget(self.drop_area)
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        paths = [u.toLocalFile() for u in urls if u.toLocalFile()]
+        if paths:
+            self.load_video(paths[0])
 
     def _choose_video_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -232,17 +230,11 @@ class TabCutter(QWidget):
         self.player_widget.range_slider.set_values(s_val, e_val)
         self.player_widget.range_slider.blockSignals(False)
 
-        if not self.chk_auto_snap.isChecked():
-            self.lbl_snap_result.setText(f"吸附已关闭：将直接按精确时间截取")
-            return
-
         s_snap, s_diff = KeyframeHelper.snap_to_keyframe(s_val, self.keyframes, mode="floor")
         e_snap, e_diff = KeyframeHelper.snap_to_keyframe(e_val, self.keyframes, mode="ceil")
 
         self.lbl_snap_result.setText(
-            f"起点对齐: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s)\n"
-            f"终点对齐: {KeyframeHelper.format_time(e_snap)} ({e_diff:+.2f}s)\n"
-            f"实际片段时长: {KeyframeHelper.format_time(max(0.0, e_snap - s_snap))}"
+            f"⚡ 起点对齐: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s) ➔ 终点: {KeyframeHelper.format_time(e_snap)} ({e_diff:+.2f}s)"
         )
 
     def _start_cut(self):
@@ -263,13 +255,15 @@ class TabCutter(QWidget):
 
         self.btn_cut.setEnabled(False)
         self.btn_cut.setText("⏳ 正在毫秒级流复制裁切...")
+        self.prog_cut.setRange(0, 0)
+        self.lbl_cut_status.setText("⚡ 正在执行关键帧吸附与流复制...")
+        self._cut_start_time = time.time()
 
-        auto_snap = self.chk_auto_snap.isChecked()
         self.worker = CutterWorker(
             self.current_file,
             start_sec=s_sec,
             end_sec=e_sec,
-            auto_snap=auto_snap
+            auto_snap=True
         )
         self.worker.finished.connect(self._on_cut_finished)
         self.worker.start()
@@ -277,12 +271,19 @@ class TabCutter(QWidget):
     def _on_cut_finished(self, success: bool, msg: str, out_path: str):
         self.btn_cut.setEnabled(True)
         self.btn_cut.setText("⚡ 极速无损裁切 (毫秒级导出)")
+        elapsed = time.time() - getattr(self, "_cut_start_time", time.time())
+        self.prog_cut.setRange(0, 100)
+
         if success:
+            self.prog_cut.setValue(100)
+            self.lbl_cut_status.setText(f"✅ 裁切成功 (耗时 {elapsed:.2f}s)！已存入 output_cut")
             QMessageBox.information(
                 self, "裁切成功",
-                f"🎉 视频极速截取成功！\n\n已保存至:\n{out_path}"
+                f"🎉 视频极速截取成功 (耗时 {elapsed:.2f}s)！\n\n已保存至:\n{out_path}"
             )
         else:
+            self.prog_cut.setValue(0)
+            self.lbl_cut_status.setText("❌ 裁切发生错误")
             QMessageBox.critical(self, "裁切失败", f"处理过程中发生错误:\n{msg}")
 
     def _open_output_dir(self):

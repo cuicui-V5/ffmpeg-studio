@@ -38,7 +38,7 @@ class RangeSlider(QWidget):
         self.update()
 
     def _val_to_x(self, val: float) -> float:
-        margin = self.handle_width / 2 + 2
+        margin = self.handle_width / 2
         track_w = self.width() - 2 * margin
         if self.max_val <= self.min_val:
             return margin
@@ -46,7 +46,7 @@ class RangeSlider(QWidget):
         return margin + ratio * track_w
 
     def _x_to_val(self, x: float) -> float:
-        margin = self.handle_width / 2 + 2
+        margin = self.handle_width / 2
         track_w = self.width() - 2 * margin
         if track_w <= 0:
             return self.min_val
@@ -59,14 +59,14 @@ class RangeSlider(QWidget):
 
         w = self.width()
         h = self.height()
-        margin = self.handle_width / 2 + 2
-        track_y = h / 2 - 4
-        track_h = 8
+        margin = self.handle_width / 2
+        track_y = h / 2 - 3
+        track_h = 6
 
         # 1. 轨道底色
         painter.setPen(QPen(QColor("#3e4451"), 1))
         painter.setBrush(QBrush(QColor("#21252b")))
-        painter.drawRoundedRect(QRectF(margin, track_y, w - 2 * margin, track_h), 4, 4)
+        painter.drawRoundedRect(QRectF(margin, track_y, w - 2 * margin, track_h), 3, 3)
 
         # 2. 选中裁切区间高亮色
         x_start = self._val_to_x(self.start_val)

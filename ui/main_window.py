@@ -17,8 +17,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("FFmpeg Multi-Tool Studio — 智能音视频工作台")
         self.resize(1200, 820)
         self.setMinimumSize(1000, 680)
+        self.setAcceptDrops(True)
 
         central_widget = QWidget()
+        central_widget.setAcceptDrops(True)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(12, 12, 12, 6)
 
@@ -58,6 +60,26 @@ class MainWindow(QMainWindow):
         lbl_info = QLabel(status_text)
         lbl_info.setStyleSheet("padding-left: 10px; color: #abb2bf; font-size: 12px;")
         self.status_bar.addWidget(lbl_info)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        paths = [u.toLocalFile() for u in urls if u.toLocalFile()]
+        if not paths:
+            return
+
+        cur_idx = self.tab_widget.currentIndex()
+        if cur_idx == 0:
+            self.tab_compress._handle_dropped_paths(paths)
+        elif cur_idx == 1:
+            self.tab_cutter.load_video(paths[0])
+        elif cur_idx == 2:
+            self.tab_split._handle_dropped_paths(paths)
 
     def closeEvent(self, event):
         # 确保关闭窗口时停止播放器

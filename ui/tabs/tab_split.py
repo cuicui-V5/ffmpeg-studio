@@ -20,6 +20,7 @@ class TabSplit(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.files: list[str] = []
         self.worker: BatchSplitWorker = None
 
@@ -99,34 +100,68 @@ class TabSplit(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         layout.addWidget(self.table, stretch=1)
 
-        # 5. 底部操作栏
+        # 5. 底部操作栏与双层进度面板
+        bottom_box = QGroupBox("执行进度与操作")
+        bottom_box_layout = QVBoxLayout(bottom_box)
+        bottom_box_layout.setContentsMargins(12, 10, 12, 10)
+        bottom_box_layout.setSpacing(8)
+
+        # 单文件进度
+        cur_layout = QVBoxLayout()
+        self.lbl_cur_split = QLabel("当前文件: 等待处理")
+        self.lbl_cur_split.setStyleSheet("font-weight: bold; color: #00d2ff; font-size: 12px;")
+        self.prog_cur_file = QProgressBar()
+        self.prog_cur_file.setValue(0)
+        self.prog_cur_file.setFixedHeight(18)
+        cur_layout.addWidget(self.lbl_cur_split)
+        cur_layout.addWidget(self.prog_cur_file)
+        bottom_box_layout.addLayout(cur_layout)
+
+        # 整体进度与操作按钮
         bottom_layout = QHBoxLayout()
+        self.lbl_overall = QLabel("总进度: 0 / 0")
+        self.lbl_overall.setStyleSheet("font-weight: bold;")
         self.prog_overall = QProgressBar()
         self.prog_overall.setValue(0)
-        self.lbl_status = QLabel("就绪")
-        self.lbl_status.setStyleSheet("color: #00d2ff;")
+        self.prog_overall.setFixedHeight(18)
 
         self.btn_start = QPushButton("⚡ 开始智能分段")
         self.btn_start.setObjectName("primaryBtn")
         self.btn_start.setFixedWidth(140)
+        self.btn_start.setFixedHeight(36)
         self.btn_start.clicked.connect(self._start_split)
 
         self.btn_cancel = QPushButton("⏹ 取消")
         self.btn_cancel.setObjectName("dangerBtn")
         self.btn_cancel.setFixedWidth(80)
+        self.btn_cancel.setFixedHeight(36)
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel_split)
 
         self.btn_open_dir = QPushButton("📂 打开输出目录")
+        self.btn_open_dir.setFixedHeight(36)
         self.btn_open_dir.clicked.connect(self._open_output_dir)
 
-        bottom_layout.addWidget(self.lbl_status)
+        bottom_layout.addWidget(self.lbl_overall)
         bottom_layout.addWidget(self.prog_overall, stretch=1)
         bottom_layout.addWidget(self.btn_open_dir)
         bottom_layout.addWidget(self.btn_cancel)
         bottom_layout.addWidget(self.btn_start)
+        bottom_box_layout.addLayout(bottom_layout)
 
-        layout.addLayout(bottom_layout)
+        layout.addWidget(bottom_box)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        paths = [u.toLocalFile() for u in urls if u.toLocalFile()]
+        if paths:
+            self._handle_dropped_paths(paths)
 
     def _on_preset_changed(self):
         name = self.combo_preset.currentText()
@@ -182,7 +217,9 @@ class TabSplit(QWidget):
         self.files.clear()
         self.table.setRowCount(0)
         self.prog_overall.setValue(0)
-        self.lbl_status.setText("就绪")
+        self.prog_cur_file.setValue(0)
+        self.lbl_cur_split.setText("当前文件: 等待处理")
+        self.lbl_overall.setText("总进度: 0 / 0")
 
     def _recalculate_plans(self):
         max_bytes = self.spin_size_mb.value() * 1024 * 1024
@@ -230,28 +267,34 @@ class TabSplit(QWidget):
 
         self.worker = BatchSplitWorker(self.files, max_bytes, max_sec)
         self.worker.item_updated.connect(self._on_item_updated)
+        self.worker.file_progress.connect(self._on_file_progress)
         self.worker.overall_progress.connect(self._on_overall_progress)
         self.worker.all_finished.connect(self._on_all_finished)
         self.worker.start()
 
     def _cancel_split(self):
         if self.worker:
-            self.lbl_status.setText("正在取消...")
+            self.lbl_cur_split.setText("正在取消...")
             self.worker.cancel()
 
     def _on_item_updated(self, idx: int, status: str, pct: float):
         if 0 <= idx < self.table.rowCount():
             self.table.setItem(idx, 5, QTableWidgetItem(status))
 
+    def _on_file_progress(self, filename: str, pct: float, status_desc: str):
+        self.lbl_cur_split.setText(f"当前处理: {filename} ({status_desc})")
+        self.prog_cur_file.setValue(int(pct))
+
     def _on_overall_progress(self, done: int, total: int):
+        self.lbl_overall.setText(f"总进度: {done} / {total}")
         if total > 0:
             self.prog_overall.setValue(int((done / total) * 100))
-            self.lbl_status.setText(f"处理进度: {done} / {total}")
 
     def _on_all_finished(self):
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
-        self.lbl_status.setText("🎉 分段任务处理完毕！")
+        self.prog_cur_file.setValue(100)
+        self.lbl_cur_split.setText("🎉 所选文件已全部处理完毕！")
         QMessageBox.information(self, "完成", "所选视频的分段与复制操作已全部完成！")
 
     def _open_output_dir(self):

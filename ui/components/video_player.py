@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QSlider, QLabel, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QImage, QPixmap, QPainter, QColor
+from PySide6.QtGui import QImage, QPixmap
 
 from core.keyframe_helper import KeyframeHelper
 from ui.components.range_slider import RangeSlider
@@ -41,7 +41,8 @@ class VideoPlayerWidget(QWidget):
     """
     通用视频预览播放器 (基于 PyAV / FFmpeg 核心解码)
     100% 独立于 Windows 系统编解码器，完美支持 HEVC/H.265、H.264、AV1 等任意格式
-    内置视频时间轴进度条与双向裁切入点/出点滑块 (RangeSlider)
+    内置视频时间轴进度条与双向裁切入点/出点滑块 (RangeSlider)，两轴像素级垂直严格对齐
+    具备高频拖拽节流消抖机制，滑动预览丝滑流畅不卡顿
     """
     position_changed = Signal(float)       # 当前播放秒数
     range_changed = Signal(float, float)   # (in_sec, out_sec)
@@ -63,6 +64,13 @@ class VideoPlayerWidget(QWidget):
         self.play_timer = QTimer(self)
         self.play_timer.timeout.connect(self._on_play_step)
 
+        # 拖拽节流定时器 (避免高频拖拽连续解码导致界面假死或卡顿)
+        self._pending_seek_sec = None
+        self._seek_throttle_timer = QTimer(self)
+        self._seek_throttle_timer.setSingleShot(True)
+        self._seek_throttle_timer.setInterval(20)  # ~50 FPS 渲染速率
+        self._seek_throttle_timer.timeout.connect(self._do_pending_seek)
+
         # UI 构建
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -74,13 +82,22 @@ class VideoPlayerWidget(QWidget):
 
         # 2. 控制面板卡片
         control_card = QFrame()
-        control_card.setStyleSheet("background-color: #21252b; border-radius: 6px; padding: 6px;")
+        control_card.setStyleSheet("QFrame#playerControlCard { background-color: #21252b; border-radius: 6px; }")
+        control_card.setObjectName("playerControlCard")
         control_layout = QVBoxLayout(control_card)
-        control_layout.setContentsMargins(10, 6, 10, 6)
-        control_layout.setSpacing(4)
+        control_layout.setContentsMargins(10, 8, 10, 8)
+        control_layout.setSpacing(6)
 
-        # A. 播放进度条与时间显示
+        # A. 播放进度条 (左标 65px + 滑块 stretch=1 + 右标 145px)
         time_bar = QHBoxLayout()
+        time_bar.setContentsMargins(0, 0, 0, 0)
+        time_bar.setSpacing(8)
+
+        lbl_play = QLabel("播放位置:")
+        lbl_play.setFixedWidth(65)
+        lbl_play.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lbl_play.setStyleSheet("color: #abb2bf; font-weight: bold; font-size: 12px;")
+
         self.slider_play = QSlider(Qt.Horizontal)
         self.slider_play.setRange(0, 1000)
         self.slider_play.sliderPressed.connect(self._on_slider_pressed)
@@ -88,23 +105,35 @@ class VideoPlayerWidget(QWidget):
         self.slider_play.sliderMoved.connect(self._on_slider_moved)
 
         self.time_label = QLabel("00:00:00 / 00:00:00")
+        self.time_label.setFixedWidth(145)
         self.time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #abb2bf;")
 
+        time_bar.addWidget(lbl_play)
         time_bar.addWidget(self.slider_play, stretch=1)
         time_bar.addWidget(self.time_label)
         control_layout.addLayout(time_bar)
 
-        # B. 裁切区间滑块 (入点和出点双向拖拽)
+        # B. 裁切区间滑块 (左标 65px + 滑块 stretch=1 + 右标 145px，与播放进度条完美对齐)
         range_bar = QHBoxLayout()
+        range_bar.setContentsMargins(0, 0, 0, 0)
+        range_bar.setSpacing(8)
+
         lbl_range_title = QLabel("裁切区间:")
-        lbl_range_title.setStyleSheet("font-size: 11px; color: #8a919e; font-weight: bold;")
+        lbl_range_title.setFixedWidth(65)
+        lbl_range_title.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lbl_range_title.setStyleSheet("color: #00d2ff; font-weight: bold; font-size: 12px;")
 
         self.range_slider = RangeSlider()
         self.range_slider.range_changed.connect(self._on_range_slider_changed)
         self.range_slider.handle_scrubbing.connect(self._on_range_scrubbing)
 
+        self.range_time_label = QLabel("00:00:00 ➔ 00:00:00")
+        self.range_time_label.setFixedWidth(145)
+        self.range_time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #00d2ff;")
+
         range_bar.addWidget(lbl_range_title)
         range_bar.addWidget(self.range_slider, stretch=1)
+        range_bar.addWidget(self.range_time_label)
         control_layout.addLayout(range_bar)
 
         # C. 操作按钮条
@@ -173,6 +202,7 @@ class VideoPlayerWidget(QWidget):
             self.slider_play.setValue(0)
             self.range_slider.set_range(0.0, self.duration_sec)
             self.range_slider.set_values(0.0, self.duration_sec)
+            self._update_range_time_label(0.0, self.duration_sec)
 
             # 载入并显示第 0 帧
             self.seek_and_display(0.0)
@@ -180,8 +210,8 @@ class VideoPlayerWidget(QWidget):
         except Exception as e:
             self.canvas.setText(f"❌ 视频加载失败: {e}")
 
-    def seek_and_display(self, seconds: float):
-        """精准或快速定位到指定秒数并刷新渲染当前帧"""
+    def _decode_and_render_frame(self, seconds: float):
+        """核心底层解码并上屏单帧画面"""
         if not self.container or not self.video_stream:
             return
 
@@ -190,31 +220,45 @@ class VideoPlayerWidget(QWidget):
 
         try:
             pts = int(seconds / self.video_stream.time_base)
-            # any_frame=False 定位关键帧，然后解码至目标帧
+            # any_frame=False 高速定位到邻近关键帧解码
             self.container.seek(pts, stream=self.video_stream, any_frame=False)
             
             for frame in self.container.decode(self.video_stream):
-                cur_pts_sec = float(frame.pts * self.video_stream.time_base)
-                # 当靠近目标时间或已到第1帧有效画面
-                if cur_pts_sec >= seconds - 0.05 or True:
-                    rgb = frame.to_rgb().to_ndarray()
-                    h, w, _ = rgb.shape
-                    qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
-                    pix = QPixmap.fromImage(qimg)
-                    self.canvas.display_pixmap(pix)
-                    break
+                rgb = frame.to_rgb().to_ndarray()
+                h, w, _ = rgb.shape
+                qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+                pix = QPixmap.fromImage(qimg)
+                self.canvas.display_pixmap(pix)
+                break
         except Exception:
             pass
 
-        # 更新播放进度条与时间文本
+        self._update_time_label()
+        self.position_changed.emit(self.current_sec)
+
+    def seek_and_display(self, seconds: float):
+        """即时定位并更新画面（用于点击、释放、暂停时）"""
+        self._decode_and_render_frame(seconds)
         if not self._is_scrubbing and self.duration_sec > 0:
             val = int((self.current_sec / self.duration_sec) * 1000)
             self.slider_play.blockSignals(True)
             self.slider_play.setValue(val)
             self.slider_play.blockSignals(False)
 
+    def _request_throttled_seek(self, seconds: float):
+        """节流请求，高频拖拽时消除卡顿"""
+        self.current_sec = max(0.0, min(self.duration_sec, seconds))
         self._update_time_label()
-        self.position_changed.emit(self.current_sec)
+
+        self._pending_seek_sec = seconds
+        if not self._seek_throttle_timer.isActive():
+            self._seek_throttle_timer.start()
+
+    def _do_pending_seek(self):
+        if self._pending_seek_sec is not None:
+            sec = self._pending_seek_sec
+            self._pending_seek_sec = None
+            self._decode_and_render_frame(sec)
 
     def toggle_play(self):
         if self._is_playing:
@@ -243,6 +287,7 @@ class VideoPlayerWidget(QWidget):
 
     def set_range_values(self, start_sec: float, end_sec: float):
         self.range_slider.set_values(start_sec, end_sec)
+        self._update_range_time_label(start_sec, end_sec)
 
     def _on_play_step(self):
         step_sec = 1.0 / self.fps
@@ -268,24 +313,27 @@ class VideoPlayerWidget(QWidget):
     def _on_slider_moved(self, val):
         if self.duration_sec > 0:
             target_sec = (val / 1000.0) * self.duration_sec
-            self.seek_and_display(target_sec)
+            self._request_throttled_seek(target_sec)
 
     def _on_range_slider_changed(self, in_sec: float, out_sec: float):
+        self._update_range_time_label(in_sec, out_sec)
         self.range_changed.emit(in_sec, out_sec)
 
     def _on_range_scrubbing(self, handle_name: str, sec: float):
-        """拖拽裁切滑块的入点或出点时，即时预览对应时间点的画面"""
+        """拖拽裁切滑块入点或出点时，防抖节流实时渲染对应位置画面"""
         if self._is_playing:
             self.pause()
-        self.seek_and_display(sec)
+        self._request_throttled_seek(sec)
 
     def _trigger_mark_in(self):
         self.range_slider.set_values(self.current_sec, self.range_slider.end_val)
+        self._update_range_time_label(self.current_sec, self.range_slider.end_val)
         self.mark_in_clicked.emit(self.current_sec)
         self.range_changed.emit(self.current_sec, self.range_slider.end_val)
 
     def _trigger_mark_out(self):
         self.range_slider.set_values(self.range_slider.start_val, self.current_sec)
+        self._update_range_time_label(self.range_slider.start_val, self.current_sec)
         self.mark_out_clicked.emit(self.current_sec)
         self.range_changed.emit(self.range_slider.start_val, self.current_sec)
 
@@ -293,6 +341,11 @@ class VideoPlayerWidget(QWidget):
         cur_fmt = KeyframeHelper.format_time(self.current_sec, show_ms=False)
         tot_fmt = KeyframeHelper.format_time(self.duration_sec, show_ms=False)
         self.time_label.setText(f"{cur_fmt} / {tot_fmt}")
+
+    def _update_range_time_label(self, in_sec: float, out_sec: float):
+        in_fmt = KeyframeHelper.format_time(in_sec, show_ms=False)
+        out_fmt = KeyframeHelper.format_time(out_sec, show_ms=False)
+        self.range_time_label.setText(f"{in_fmt} ➔ {out_fmt}")
 
     def close(self):
         self.pause()

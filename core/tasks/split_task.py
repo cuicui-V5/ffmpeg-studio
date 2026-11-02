@@ -71,6 +71,7 @@ class SplitPlan:
 class BatchSplitWorker(QThread):
     """批量分段执行后台线程"""
     item_updated = Signal(int, str, float)  # (index, status_text, progress_pct)
+    file_progress = Signal(str, float, str) # (filename, pct, status_desc)
     overall_progress = Signal(int, int)     # (done_count, total_count)
     log_emitted = Signal(str)
     all_finished = Signal()
@@ -121,16 +122,20 @@ class BatchSplitWorker(QThread):
 
             if not plan.needs_split:
                 self.item_updated.emit(idx, "符合限制 (直接复制)", 50.0)
+                self.file_progress.emit(plan.filename, 50.0, "符合限制，直接复制中...")
                 self.log_emitted.emit(f"  > 视频体量符合要求，无需切片，直接复制中...")
                 target_file = out_folder / plan.filename
                 try:
                     shutil.copy2(plan.file_path, target_file)
                     self.item_updated.emit(idx, "已完成 (直通)", 100.0)
+                    self.file_progress.emit(plan.filename, 100.0, "复制完成")
                     self.log_emitted.emit(f"  ✅ 复制完成: {target_file.name}")
                 except Exception as e:
                     self.item_updated.emit(idx, f"复制失败: {e}", 0.0)
+                    self.file_progress.emit(plan.filename, 0.0, f"复制失败: {e}")
             else:
                 self.item_updated.emit(idx, f"切片中 (预计 {plan.part_count} 段)", 10.0)
+                self.file_progress.emit(plan.filename, 20.0, f"正在极速切分 (共 {plan.part_count} 段)...")
                 self.log_emitted.emit(f"  > 触发自动分段: 每段限时 {plan.split_time:.2f}s，预计切分 {plan.part_count} 段...")
                 
                 output_pattern = str(out_folder / f"{plan.file_path.stem}_part%03d{plan.file_path.suffix}")
@@ -156,16 +161,20 @@ class BatchSplitWorker(QThread):
 
                     if self._is_cancelled:
                         self.item_updated.emit(idx, "已取消", 0.0)
+                        self.file_progress.emit(plan.filename, 0.0, "任务已取消")
                         break
 
                     if self._proc.returncode == 0:
                         self.item_updated.emit(idx, "已完成 (已分段)", 100.0)
+                        self.file_progress.emit(plan.filename, 100.0, f"切片成功完成 (生成 {plan.part_count} 个文件)")
                         self.log_emitted.emit(f"  ✅ 极速切片完成！文件已存入: {out_folder}")
                     else:
                         self.item_updated.emit(idx, "切片失败", 0.0)
+                        self.file_progress.emit(plan.filename, 0.0, "切片失败")
                         self.log_emitted.emit(f"  ❌ 切片失败: {out}")
                 except Exception as e:
                     self.item_updated.emit(idx, f"异常: {e}", 0.0)
+                    self.file_progress.emit(plan.filename, 0.0, f"异常: {e}")
                     self.log_emitted.emit(f"  ❌ 异常: {e}")
 
             self.overall_progress.emit(idx + 1, total)
