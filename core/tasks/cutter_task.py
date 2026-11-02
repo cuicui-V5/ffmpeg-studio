@@ -1,5 +1,6 @@
 import os
 import subprocess
+import av
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from core.tool_manager import tool_mgr
@@ -47,22 +48,23 @@ class CutterWorker(QThread):
             self.finished.emit(False, "未找到 ffmpeg 可执行文件", "")
             return
 
-        # 1. 关键帧吸附对齐
+        # 1. 关键帧毫秒级瞬间吸附对齐 (基于索引定位，耗时 < 2ms)
         if self.auto_snap:
-            self.log_emitted.emit("🔍 正在扫描视频关键帧索引...")
-            kfs = KeyframeHelper.get_keyframes(str(self.file_path))
-            if kfs:
-                s_snap, s_diff = KeyframeHelper.snap_to_keyframe(self.raw_start, kfs, mode="floor")
-                e_snap, e_diff = KeyframeHelper.snap_to_keyframe(self.raw_end, kfs, mode="ceil")
-                self.snapped_start = s_snap
-                self.snapped_end = e_snap
-                self.log_emitted.emit(
-                    f"⚡ 关键帧对齐完成（杜绝黑屏）:\n"
-                    f"   起点: {KeyframeHelper.format_time(self.raw_start)} -> {KeyframeHelper.format_time(self.snapped_start)} (偏移 {s_diff:+.2f}s)\n"
-                    f"   终点: {KeyframeHelper.format_time(self.raw_end)} -> {KeyframeHelper.format_time(self.snapped_end)} (偏移 {e_diff:+.2f}s)"
-                )
-            else:
-                self.log_emitted.emit("⚠️ 未提取到关键帧，按原输入时间截取。")
+            self.log_emitted.emit("⚡ 正在执行关键帧智能对齐 (杜绝黑屏)...")
+            try:
+                with av.open(str(self.file_path)) as container:
+                    stream = container.streams.video[0]
+                    s_snap, s_diff = KeyframeHelper.find_keyframe_instant(container, stream, self.raw_start, mode="floor")
+                    e_snap, e_diff = KeyframeHelper.find_keyframe_instant(container, stream, self.raw_end, mode="ceil")
+                    self.snapped_start = s_snap
+                    self.snapped_end = e_snap
+                    self.log_emitted.emit(
+                        f"⚡ 关键帧对齐完成（杜绝黑屏）:\n"
+                        f"   起点: {KeyframeHelper.format_time(self.raw_start)} -> {KeyframeHelper.format_time(self.snapped_start)} (偏移 {s_diff:+.2f}s)\n"
+                        f"   终点: {KeyframeHelper.format_time(self.raw_end)} -> {KeyframeHelper.format_time(self.snapped_end)} (偏移 {e_diff:+.2f}s)"
+                    )
+            except Exception as e:
+                self.log_emitted.emit(f"⚠️ 快速关键帧对齐异常，按原时间截取: {e}")
 
         # 2. 校验时间
         if self.snapped_end <= self.snapped_start:

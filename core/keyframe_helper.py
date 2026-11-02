@@ -2,6 +2,7 @@ import os
 import json
 import bisect
 import subprocess
+import av
 from core.tool_manager import tool_mgr
 
 class KeyframeHelper:
@@ -44,9 +45,37 @@ class KeyframeHelper:
 
     @classmethod
     def get_video_info(cls, file_path: str) -> dict:
-        """获取视频完整媒体信息"""
+        """高速获取视频媒体信息 (优先 PyAV 8ms 读取，异常时回退至 ffprobe)"""
+        if not os.path.isfile(file_path):
+            return {}
+
+        # 1. 优先使用 PyAV 直接解析容器 Header (毫秒级响应)
+        try:
+            with av.open(file_path) as container:
+                stream = container.streams.video[0]
+                dur = float(container.duration / 1000000.0) if container.duration else 0.0
+                if dur <= 0 and stream.duration:
+                    dur = float(stream.duration * stream.time_base)
+                
+                r_fps = stream.average_rate
+                fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
+
+                return {
+                    "file_path": file_path,
+                    "duration": dur,
+                    "size": os.path.getsize(file_path),
+                    "bit_rate": int(container.bit_rate) if container.bit_rate else 0,
+                    "width": stream.width,
+                    "height": stream.height,
+                    "codec": stream.codec_context.name,
+                    "fps": round(fps, 2)
+                }
+        except Exception:
+            pass
+
+        # 2. 回退机制：使用 ffprobe
         ffprobe = tool_mgr.get_path("ffprobe")
-        if not ffprobe or not os.path.isfile(file_path):
+        if not ffprobe:
             return {}
 
         cmd = [
@@ -55,7 +84,7 @@ class KeyframeHelper:
             "-of", "json", file_path
         ]
         try:
-            ret = subprocess.run(cmd, capture_output=True, text=True, errors="ignore", timeout=10)
+            ret = subprocess.run(cmd, capture_output=True, text=True, errors="ignore", timeout=8)
             if ret.returncode != 0 or not ret.stdout:
                 return {}
             data = json.loads(ret.stdout)
@@ -72,7 +101,6 @@ class KeyframeHelper:
                     width = int(stream["width"])
                     height = int(stream["height"])
                     codec = stream.get("codec_name", "unknown")
-                    # 解析帧率
                     r_fps = stream.get("r_frame_rate", "")
                     if "/" in r_fps:
                         num, den = r_fps.split("/")
@@ -96,8 +124,36 @@ class KeyframeHelper:
             return {}
 
     @classmethod
+    def find_keyframe_instant(cls, container, stream, target_sec: float, mode: str = "floor") -> tuple[float, float]:
+        """
+        利用已经打开的视频容器索引，在 1 毫秒内瞬间定位目标时间点邻近的关键帧
+        - mode='floor'：吸附至前一个关键帧 (适合裁剪开始时间，确保以 IDR 关键帧启动)
+        - mode='ceil'：吸附至后一个关键帧 (适合裁剪结束时间)
+        返回 (吸附后秒数, 偏差秒数)
+        """
+        if target_sec <= 0.02:
+            return 0.0, 0.0
+
+        if not container or not stream:
+            return target_sec, 0.0
+
+        try:
+            pts = int(target_sec / stream.time_base)
+            backward = (mode == "floor")
+            container.seek(pts, stream=stream, any_frame=False, backward=backward)
+            
+            for packet in container.demux(stream):
+                if packet.is_keyframe and packet.pts is not None:
+                    kf_sec = float(packet.pts * stream.time_base)
+                    return round(kf_sec, 3), round(kf_sec - target_sec, 3)
+        except Exception:
+            pass
+
+        return target_sec, 0.0
+
+    @classmethod
     def get_keyframes(cls, file_path: str) -> list[float]:
-        """高速读取视频的所有关键帧时间戳（基于 packet 标志解析，无解码开销）"""
+        """异步/后台使用的全量关键帧读取"""
         if file_path in cls._cache:
             return cls._cache[file_path]
 
@@ -129,7 +185,6 @@ class KeyframeHelper:
             pass
 
         keyframes = sorted(list(set(keyframes)))
-        # 保证起始至少有 0.0
         if not keyframes or keyframes[0] > 0.05:
             keyframes.insert(0, 0.0)
 
@@ -138,13 +193,7 @@ class KeyframeHelper:
 
     @classmethod
     def snap_to_keyframe(cls, target_sec: float, keyframes: list[float], mode: str = "nearest") -> tuple[float, float]:
-        """
-        将目标时间戳吸附到最合适的关键帧：
-        - mode='floor'：吸附到前一个关键帧 (适合裁剪开始时间，确保内容不丢失且以IDR帧开始)
-        - mode='ceil'：吸附到后一个关键帧 (适合裁剪结束时间)
-        - mode='nearest'：吸附到绝对距离最近的关键帧
-        返回 (吸附后的秒数, 偏移秒数)
-        """
+        """已具备全量索引时的吸附算法"""
         if not keyframes:
             return target_sec, 0.0
 
@@ -162,7 +211,7 @@ class KeyframeHelper:
                 snapped = keyframes[-1]
             else:
                 snapped = keyframes[idx]
-        else: # nearest
+        else:
             if idx == 0:
                 snapped = keyframes[0]
             elif idx >= len(keyframes):

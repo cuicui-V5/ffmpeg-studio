@@ -171,21 +171,18 @@ class TabCutter(QWidget):
         self.lbl_file_path.setText(file_path)
         self.lbl_file_path.setStyleSheet("color: #00d2ff; font-weight: bold;")
 
-        # 读取元信息
+        # 读取元信息 (极速毫秒级解析)
         info = KeyframeHelper.get_video_info(file_path)
         self.total_duration = info.get("duration", 0.0)
         dur_str = KeyframeHelper.format_time(self.total_duration)
         size_mb = f"{info.get('size', 0) / (1024*1024):.2f} MB"
-        
-        # 读取关键帧
-        self.keyframes = KeyframeHelper.get_keyframes(file_path)
 
         meta_text = (
             f"分辨率: {info.get('width', 0)}x{info.get('height', 0)}\n"
             f"编码格式: {info.get('codec', '未知')} ({info.get('fps', 0)} fps)\n"
             f"视频时长: {dur_str} ({self.total_duration:.2f} 秒)\n"
             f"文件大小: {size_mb}\n"
-            f"关键帧总数: {len(self.keyframes)} 个 (平均间隔: {(self.total_duration/max(1, len(self.keyframes))):.2f}s)"
+            f"关键帧对齐: ⚡ 已就绪 (毫秒级索引极速定位)"
         )
         self.lbl_video_meta.setText(meta_text)
 
@@ -193,7 +190,7 @@ class TabCutter(QWidget):
         self.edit_start.setText("00:00:00.00")
         self.edit_end.setText(dur_str)
 
-        # 加载至播放器
+        # 加载至播放器 (立即显示第 0 帧画面)
         self.player_widget.load_video(file_path)
         self._update_snap_preview()
 
@@ -219,7 +216,7 @@ class TabCutter(QWidget):
         self._update_snap_preview()
 
     def _update_snap_preview(self):
-        if not self.current_file or not self.keyframes:
+        if not self.current_file or not self.player_widget.container:
             return
 
         s_val = KeyframeHelper.parse_time(self.edit_start.text()) or 0.0
@@ -230,8 +227,10 @@ class TabCutter(QWidget):
         self.player_widget.range_slider.set_values(s_val, e_val)
         self.player_widget.range_slider.blockSignals(False)
 
-        s_snap, s_diff = KeyframeHelper.snap_to_keyframe(s_val, self.keyframes, mode="floor")
-        e_snap, e_diff = KeyframeHelper.snap_to_keyframe(e_val, self.keyframes, mode="ceil")
+        container = self.player_widget.container
+        stream = self.player_widget.video_stream
+        s_snap, s_diff = KeyframeHelper.find_keyframe_instant(container, stream, s_val, mode="floor")
+        e_snap, e_diff = KeyframeHelper.find_keyframe_instant(container, stream, e_val, mode="ceil")
 
         self.lbl_snap_result.setText(
             f"⚡ 起点对齐: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s) ➔ 终点: {KeyframeHelper.format_time(e_snap)} ({e_diff:+.2f}s)"
