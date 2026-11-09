@@ -14,11 +14,19 @@ venv/
 *.dll
 exiftool_files/
 
+# Release & Archives
+*.zip
+*.7z
+*.tar.gz
+*.rar
+
 # Media & Outputs
 .hardware_cache.json
 output_1080p/
 output_cut/
 output_split/
+output_merge/
+output_clip/
 test_output/
 *.mp4
 *.MP4
@@ -26,8 +34,14 @@ test_output/
 *.mov
 *.avi
 *.flv
+*.log
 
 # PyInstaller & Build
 build/
 dist/
-*.spec
+# Keep spec file for reproducible builds
+!FFmpegStudio.spec
+
+# IDEs
+.vscode/
+.idea/
