@@ -68,6 +68,17 @@ class KeyframeHelper:
                     
                     r_fps = stream.average_rate
                     fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
+                    pix_fmt = getattr(stream, "pix_fmt", "") or ""
+
+                    # 解析音频流属性
+                    audio_codec = "none"
+                    sample_rate = 0
+                    channels = 0
+                    if container.streams.audio:
+                        astream = container.streams.audio[0]
+                        audio_codec = getattr(astream.codec_context, "name", "unknown") if astream.codec_context else "unknown"
+                        sample_rate = getattr(astream, "sample_rate", 0) or 0
+                        channels = getattr(astream, "channels", 0) or 0
 
                     return {
                         "file_path": file_path,
@@ -77,7 +88,11 @@ class KeyframeHelper:
                         "width": stream.width,
                         "height": stream.height,
                         "codec": stream.codec_context.name,
-                        "fps": round(fps, 2)
+                        "pix_fmt": pix_fmt,
+                        "fps": round(fps, 2),
+                        "audio_codec": audio_codec,
+                        "sample_rate": sample_rate,
+                        "channels": channels
                     }
             except Exception:
                 pass
@@ -89,7 +104,7 @@ class KeyframeHelper:
 
         cmd = [
             ffprobe, "-v", "error",
-            "-show_entries", "format=duration,size,bit_rate:stream=width,height,codec_name,r_frame_rate,duration",
+            "-show_entries", "format=duration,size,bit_rate:stream=width,height,codec_type,codec_name,pix_fmt,r_frame_rate,sample_rate,channels",
             "-of", "json", file_path
         ]
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -111,13 +126,17 @@ class KeyframeHelper:
             size = int(fmt.get("size", 0))
             bit_rate = int(fmt.get("bit_rate", 0)) if fmt.get("bit_rate") else 0
             
-            width, height, codec = 0, 0, "unknown"
+            width, height, codec, pix_fmt = 0, 0, "unknown", ""
             fps = 0.0
+            audio_codec, sample_rate, channels = "none", 0, 0
+
             for stream in data.get("streams", []):
-                if stream.get("width") and stream.get("height"):
+                ctype = stream.get("codec_type")
+                if ctype == "video" and not width and stream.get("width") and stream.get("height"):
                     width = int(stream["width"])
                     height = int(stream["height"])
                     codec = stream.get("codec_name", "unknown")
+                    pix_fmt = stream.get("pix_fmt", "")
                     r_fps = stream.get("r_frame_rate", "")
                     if "/" in r_fps:
                         num, den = r_fps.split("/")
@@ -125,7 +144,10 @@ class KeyframeHelper:
                             fps = float(num) / float(den)
                     elif r_fps:
                         fps = float(r_fps)
-                    break
+                elif ctype == "audio" and audio_codec == "none":
+                    audio_codec = stream.get("codec_name", "unknown")
+                    sample_rate = int(stream.get("sample_rate", 0))
+                    channels = int(stream.get("channels", 0))
                     
             return {
                 "file_path": file_path,
@@ -135,7 +157,11 @@ class KeyframeHelper:
                 "width": width,
                 "height": height,
                 "codec": codec,
-                "fps": round(fps, 2)
+                "pix_fmt": pix_fmt,
+                "fps": round(fps, 2),
+                "audio_codec": audio_codec,
+                "sample_rate": sample_rate,
+                "channels": channels
             }
         except Exception:
             return {}

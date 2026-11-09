@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from ui.tabs.tab_compress import TabCompress
 from ui.tabs.tab_cutter import TabCutter
 from ui.tabs.tab_split import TabSplit
+from ui.tabs.tab_merge import TabMerge
 from ui.tabs.tab_settings import TabSettings
 from core.tool_manager import tool_mgr
 from core.hardware import HardwareDetector
@@ -30,11 +31,13 @@ class MainWindow(QMainWindow):
         self.tab_compress = TabCompress()
         self.tab_cutter = TabCutter()
         self.tab_split = TabSplit()
+        self.tab_merge = TabMerge()
         self.tab_settings = TabSettings()
 
         self.tab_widget.addTab(self.tab_compress, "🎬 批量压制 1080p (元数据保护)")
         self.tab_widget.addTab(self.tab_cutter, "✂️ 极速裁切 (内嵌预览·对齐关键帧)")
         self.tab_widget.addTab(self.tab_split, "📦 平台智能分段 (QQ/微信/社交限制)")
+        self.tab_widget.addTab(self.tab_merge, "🧩 极速无损合并 (参数自动校验)")
         self.tab_widget.addTab(self.tab_settings, "⚙️ 工具与硬件加速诊断")
 
         main_layout.addWidget(self.tab_widget)
@@ -80,11 +83,16 @@ class MainWindow(QMainWindow):
             self.tab_cutter.load_video(paths[0])
         elif cur_idx == 2:
             self.tab_split._handle_dropped_paths(paths)
+        elif cur_idx == 3:
+            self.tab_merge._handle_dropped_paths(paths)
 
     def closeEvent(self, event):
-        # 确保关闭窗口时停止播放器与后台诊断线程
+        # 确保关闭窗口时停止播放器与后台诊断/合并线程
         if hasattr(self.tab_cutter, "player_widget"):
             self.tab_cutter.player_widget.close()
         if hasattr(self.tab_settings, "_worker") and self.tab_settings._worker and self.tab_settings._worker.isRunning():
             self.tab_settings._worker.wait(1000)
+        if hasattr(self.tab_merge, "worker") and self.tab_merge.worker and self.tab_merge.worker.isRunning():
+            self.tab_merge.worker.cancel()
+            self.tab_merge.worker.wait(1000)
         event.accept()
