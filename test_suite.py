@@ -112,8 +112,29 @@ def test_system():
     print(f"  真实合并验证成功！输出时长: {merged_info['duration']:.2f}s, 大小: {merged_file.stat().st_size / (1024*1024):.2f} MB")
     assert merged_info['duration'] >= 3.5, "合并时长应接近 4 秒"
 
+    # 6.4 预裁剪 + 无损合并流水线测试
+    crop_merge_file = out_dir / "test_crop_merged_output.mp4"
+    cm1 = MergeItem(
+        filepath=Path(test_video), filename=Path(test_video).name,
+        duration=merged_info['duration'], size=1024*1024, width=1920, height=1080,
+        codec="hevc", pix_fmt="yuv420p", fps=50.0, audio_codec="aac", sample_rate=48000, channels=2,
+        is_cropped=True, crop_start=1.0, crop_end=3.0, snapped_start=1.0, snapped_end=3.0
+    )
+    cm2 = MergeItem(
+        filepath=Path(test_video), filename=Path(test_video).name,
+        duration=merged_info['duration'], size=1024*1024, width=1920, height=1080,
+        codec="hevc", pix_fmt="yuv420p", fps=50.0, audio_codec="aac", sample_rate=48000, channels=2,
+        is_cropped=True, crop_start=5.0, crop_end=8.0, snapped_start=5.0, snapped_end=8.0
+    )
+    crop_worker = MergeWorker([cm1, cm2], crop_merge_file)
+    crop_worker.run()
+    assert crop_merge_file.exists() and crop_merge_file.stat().st_size > 0, "预裁剪合并文件未成功生成"
+    cm_info = KeyframeHelper.get_video_info(str(crop_merge_file))
+    print(f"  预裁剪+无损合并验证成功！输出时长: {cm_info['duration']:.2f}s, 大小: {crop_merge_file.stat().st_size / (1024*1024):.2f} MB")
+    assert cm_info['duration'] >= 4.0, "预裁剪合并时长应接近 5 秒"
+
     # 清理所有测试生成的文件
-    for f in [out_cut, clip1, clip2, merged_file]:
+    for f in [out_cut, clip1, clip2, merged_file, crop_merge_file]:
         if f.exists():
             f.unlink()
     if out_dir.exists():

@@ -5,15 +5,66 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
     QLineEdit, QFileDialog, QMessageBox, QProgressBar,
-    QGroupBox, QFrame
+    QGroupBox, QFrame, QAbstractItemView, QMenu
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QColor
 
 from core.tasks.merge_task import (
     MergeItem, MergeWorker, validate_merge_consistency, EXTENSIONS
 )
 from core.keyframe_helper import KeyframeHelper
+from ui.dialogs.video_clip_dialog import VideoClipDialog
+
+class ReorderableTableWidget(QTableWidget):
+    """支持鼠标拖拽行实时调整排序及外部视频文件拖入的增强表格控件"""
+    row_moved = Signal(int, int)       # (from_row, to_row)
+    files_dropped = Signal(list)       # list of file paths
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self._drag_start_row = -1
+
+    def startDrag(self, supportedActions):
+        self._drag_start_row = self.currentRow()
+        super().startDrag(supportedActions)
+
+    def dragEnterEvent(self, event):
+        if event.source() == self or event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.source() == self or event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.source() == self and self._drag_start_row >= 0:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            target_item = self.itemAt(pos)
+            to_row = target_item.row() if target_item else max(0, self.rowCount() - 1)
+            from_row = self._drag_start_row
+            event.acceptProposedAction()
+            self._drag_start_row = -1
+            if 0 <= from_row < self.rowCount() and 0 <= to_row < self.rowCount() and from_row != to_row:
+                self.row_moved.emit(from_row, to_row)
+        elif event.mimeData().hasUrls():
+            paths = [u.toLocalFile() for u in event.mimeData().urls() if u.toLocalFile()]
+            if paths:
+                self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
 
 class TabMerge(QWidget):
     """视频合并"""
@@ -69,7 +120,7 @@ class TabMerge(QWidget):
         card_layout = QHBoxLayout(self.card_status)
         card_layout.setContentsMargins(14, 10, 14, 10)
 
-        self.lbl_status_text = QLabel("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。")
+        self.lbl_status_text = QLabel("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。可拖拽行排序或对任意片段设置裁剪。")
         self.lbl_status_text.setStyleSheet("font-size: 13px; font-weight: 500;")
         self.lbl_status_text.setWordWrap(True)
 
@@ -77,23 +128,31 @@ class TabMerge(QWidget):
         self._apply_banner_style("neutral")
         layout.addWidget(self.card_status)
 
-        # 3. 待合并视频列表表格
-        self.table = QTableWidget(0, 9)
+        # 3. 待合并视频列表表格 (支持拖拽排序、双击裁剪、单行裁剪按钮)
+        self.table = ReorderableTableWidget(0, 11)
         self.table.setHorizontalHeaderLabels([
-            "序号", "文件名", "分辨率", "编码格式", "帧率", "音频流", "时长", "大小", "状态"
+            "序号", "文件名", "分辨率", "编码格式", "帧率", "音频流", "时长", "大小", "裁剪区间", "状态", "操作"
         ])
         self.table.setCornerButtonEnabled(False)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.setColumnWidth(0, 50)
-        self.table.setColumnWidth(2, 100)
-        self.table.setColumnWidth(3, 130)
-        self.table.setColumnWidth(4, 80)
-        self.table.setColumnWidth(5, 140)
-        self.table.setColumnWidth(6, 90)
-        self.table.setColumnWidth(7, 90)
-        self.table.setColumnWidth(8, 100)
+        self.table.setColumnWidth(0, 45)
+        self.table.setColumnWidth(2, 95)
+        self.table.setColumnWidth(3, 120)
+        self.table.setColumnWidth(4, 75)
+        self.table.setColumnWidth(5, 130)
+        self.table.setColumnWidth(6, 85)
+        self.table.setColumnWidth(7, 85)
+        self.table.setColumnWidth(8, 140)
+        self.table.setColumnWidth(9, 80)
+        self.table.setColumnWidth(10, 85)
+
+        # 连接拖拽排序与拖入事件
+        self.table.row_moved.connect(self._on_row_reordered)
+        self.table.files_dropped.connect(self._handle_dropped_paths)
+        self.table.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._on_table_context_menu)
+
         layout.addWidget(self.table, stretch=1)
 
         # 4. 底部执行控制面板
@@ -232,7 +291,7 @@ class TabMerge(QWidget):
             resolved = p.resolve()
             if resolved in existing:
                 continue
-            
+
             info = KeyframeHelper.get_video_info(str(resolved))
             if not info or info.get("duration", 0) <= 0:
                 continue
@@ -262,7 +321,11 @@ class TabMerge(QWidget):
     def _update_default_output_path(self):
         if not self._user_custom_output and self.items:
             first_path = self.items[0].filepath
-            out_dir = first_path.parent / "output_merge"
+            # 避免若源文件已在 output_merge 中出现多重嵌套
+            if first_path.parent.name == "output_merge":
+                out_dir = first_path.parent
+            else:
+                out_dir = first_path.parent / "output_merge"
             out_file = out_dir / f"{first_path.stem}_merged{first_path.suffix}"
             self.edit_output.setText(str(out_file))
 
@@ -283,6 +346,14 @@ class TabMerge(QWidget):
         if save_path:
             self.edit_output.setText(save_path)
             self._user_custom_output = True
+
+    def _on_row_reordered(self, from_row: int, to_row: int):
+        if 0 <= from_row < len(self.items) and 0 <= to_row < len(self.items) and from_row != to_row:
+            moved_item = self.items.pop(from_row)
+            self.items.insert(to_row, moved_item)
+            self._update_default_output_path()
+            self._refresh_ui()
+            self.table.selectRow(to_row)
 
     def _move_up(self):
         row = self.table.currentRow()
@@ -317,6 +388,52 @@ class TabMerge(QWidget):
         self._user_custom_output = False
         self._refresh_ui()
 
+    def _on_item_double_clicked(self, item_widget: QTableWidgetItem):
+        row = item_widget.row()
+        if 0 <= row < len(self.items):
+            self._open_clip_dialog(self.items[row])
+
+    def _open_clip_dialog(self, item: MergeItem):
+        dlg = VideoClipDialog(item, parent=self)
+        if dlg.exec():
+            self._refresh_ui()
+
+    def _on_table_context_menu(self, pos: QPoint):
+        item = self.table.itemAt(pos)
+        if not item:
+            return
+        row = item.row()
+        target = self.items[row]
+
+        menu = QMenu(self)
+        act_clip = menu.addAction("编辑裁剪区间" if target.is_cropped else "裁剪此视频")
+        if target.is_cropped:
+            act_reset = menu.addAction("清除裁剪 (恢复全片)")
+        else:
+            act_reset = None
+        menu.addSeparator()
+        act_up = menu.addAction("上移")
+        act_down = menu.addAction("下移")
+        menu.addSeparator()
+        act_remove = menu.addAction("从列表移除")
+
+        action = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if action == act_clip:
+            self._open_clip_dialog(target)
+        elif act_reset and action == act_reset:
+            target.is_cropped = False
+            target.crop_start = 0.0
+            target.crop_end = target.duration
+            target.snapped_start = 0.0
+            target.snapped_end = target.duration
+            self._refresh_ui()
+        elif action == act_up:
+            self._move_up()
+        elif action == act_down:
+            self._move_down()
+        elif action == act_remove:
+            self._remove_selected()
+
     def _refresh_ui(self):
         # 1. 运行参数校验
         is_consistent, summary, warnings = validate_merge_consistency(self.items)
@@ -324,7 +441,7 @@ class TabMerge(QWidget):
         # 2. 更新状态指示卡片
         if not self.items:
             self._apply_banner_style("neutral")
-            self.lbl_status_text.setText("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。")
+            self.lbl_status_text.setText("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。可拖拽行排序或对任意片段设置裁剪。")
         elif len(self.items) == 1:
             self._apply_banner_style("neutral")
             self.lbl_status_text.setText("当前仅添加了 1 个视频文件，请至少添加 2 个文件进行合并。")
@@ -339,20 +456,23 @@ class TabMerge(QWidget):
         self.table.setRowCount(len(self.items))
         total_sec = 0.0
         total_bytes = 0
+        cropped_count = 0
 
         for row, item in enumerate(self.items):
-            total_sec += item.duration
-            total_bytes += item.size
+            total_sec += item.effective_duration
+            total_bytes += item.effective_size
+            if item.is_cropped:
+                cropped_count += 1
 
-            # 序号
+            # 0. 序号
             item_no = QTableWidgetItem(str(row + 1))
             item_no.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 0, item_no)
 
-            # 文件名
+            # 1. 文件名
             self.table.setItem(row, 1, QTableWidgetItem(item.filename))
 
-            # 分辨率
+            # 2. 分辨率
             res_str = f"{item.width}x{item.height}"
             res_item = QTableWidgetItem(res_str)
             res_item.setTextAlignment(Qt.AlignCenter)
@@ -361,7 +481,7 @@ class TabMerge(QWidget):
                 res_item.setToolTip(f"与基准视频分辨率不一致: {self.items[0].width}x{self.items[0].height}")
             self.table.setItem(row, 2, res_item)
 
-            # 编码格式
+            # 3. 编码格式
             codec_str = f"{item.codec} ({item.pix_fmt})" if item.pix_fmt else item.codec
             codec_item = QTableWidgetItem(codec_str)
             codec_item.setTextAlignment(Qt.AlignCenter)
@@ -370,7 +490,7 @@ class TabMerge(QWidget):
                 codec_item.setToolTip(f"与基准视频编码不一致: {self.items[0].codec}")
             self.table.setItem(row, 3, codec_item)
 
-            # 帧率
+            # 4. 帧率
             fps_str = f"{item.fps:.1f} fps"
             fps_item = QTableWidgetItem(fps_str)
             fps_item.setTextAlignment(Qt.AlignCenter)
@@ -379,7 +499,7 @@ class TabMerge(QWidget):
                 fps_item.setToolTip(f"帧率与基准存在差异: {self.items[0].fps:.1f} fps")
             self.table.setItem(row, 4, fps_item)
 
-            # 音频流
+            # 5. 音频流
             if item.audio_codec != "none":
                 aud_str = f"{item.audio_codec} {item.sample_rate}Hz {item.channels}ch"
             else:
@@ -390,19 +510,48 @@ class TabMerge(QWidget):
                 aud_item.setForeground(QColor("#e06c75"))
             self.table.setItem(row, 5, aud_item)
 
-            # 时长
-            dur_item = QTableWidgetItem(KeyframeHelper.format_time(item.duration, show_ms=False))
+            # 6. 时长 (若裁剪则显示有效时长)
+            if item.is_cropped:
+                dur_str = KeyframeHelper.format_time(item.effective_duration, show_ms=False)
+                dur_item = QTableWidgetItem(dur_str)
+                dur_item.setForeground(QColor("#00d2ff"))
+                dur_item.setToolTip(
+                    f"裁剪后时长: {dur_str} (原始: {KeyframeHelper.format_time(item.duration, show_ms=False)})"
+                )
+            else:
+                dur_str = KeyframeHelper.format_time(item.duration, show_ms=False)
+                dur_item = QTableWidgetItem(dur_str)
             dur_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 6, dur_item)
 
-            # 大小
-            size_mb = item.size / (1024 * 1024)
+            # 7. 大小
+            size_mb = item.effective_size / (1024 * 1024)
             size_str = f"{size_mb / 1024:.2f} GB" if size_mb >= 1024 else f"{size_mb:.1f} MB"
             size_item = QTableWidgetItem(size_str)
             size_item.setTextAlignment(Qt.AlignCenter)
+            if item.is_cropped:
+                size_item.setForeground(QColor("#00d2ff"))
+                size_item.setToolTip("裁剪预估大小")
             self.table.setItem(row, 7, size_item)
 
-            # 状态
+            # 8. 裁剪区间
+            if item.is_cropped:
+                s_fmt = KeyframeHelper.format_time(item.crop_start, show_ms=False)
+                e_fmt = KeyframeHelper.format_time(item.crop_end, show_ms=False)
+                crop_txt = f"{s_fmt} - {e_fmt}"
+                crop_item = QTableWidgetItem(crop_txt)
+                crop_item.setForeground(QColor("#00d2ff"))
+                crop_item.setToolTip(
+                    f"裁剪设定: {item.crop_start:.2f}s 至 {item.crop_end:.2f}s\n"
+                    f"关键帧吸附: {item.snapped_start:.2f}s 至 {item.snapped_end:.2f}s"
+                )
+            else:
+                crop_item = QTableWidgetItem("全片 (未裁剪)")
+                crop_item.setForeground(QColor("#5c6370"))
+            crop_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 8, crop_item)
+
+            # 9. 状态
             if row == 0:
                 status_item = QTableWidgetItem("基准参考")
                 status_item.setForeground(QColor("#00d2ff"))
@@ -414,15 +563,34 @@ class TabMerge(QWidget):
                 status_item.setForeground(QColor("#e06c75"))
                 status_item.setToolTip("\n".join(item.mismatched_reasons))
             status_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 8, status_item)
+            self.table.setItem(row, 9, status_item)
+
+            # 10. 操作按钮 (裁剪)
+            btn_clip = QPushButton("已裁剪" if item.is_cropped else "裁剪")
+            btn_clip.setCursor(Qt.PointingHandCursor)
+            if item.is_cropped:
+                btn_clip.setStyleSheet(
+                    "QPushButton { background-color: #1a2e22; color: #98c379; border: 1px solid #98c379; "
+                    "border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; } "
+                    "QPushButton:hover { background-color: #264532; }"
+                )
+            else:
+                btn_clip.setStyleSheet(
+                    "QPushButton { background-color: #282c34; color: #abb2bf; border: 1px solid #3e4451; "
+                    "border-radius: 4px; padding: 2px 8px; font-size: 11px; } "
+                    "QPushButton:hover { background-color: #353b45; color: #ffffff; }"
+                )
+            btn_clip.clicked.connect(lambda checked, it=item: self._open_clip_dialog(it))
+            self.table.setCellWidget(row, 10, btn_clip)
 
         # 4. 统计文本
         if self.items:
             tot_dur_str = KeyframeHelper.format_time(total_sec, show_ms=False)
             tot_mb = total_bytes / (1024 * 1024)
             tot_size_str = f"{tot_mb / 1024:.2f} GB" if tot_mb >= 1024 else f"{tot_mb:.1f} MB"
+            crop_desc = f" (已裁剪: {cropped_count} 个)" if cropped_count > 0 else ""
             self.lbl_summary.setText(
-                f"统计: 共 {len(self.items)} 个文件 | 预计合并时长: {tot_dur_str} | 预估总大小: {tot_size_str}"
+                f"统计: 共 {len(self.items)} 个文件{crop_desc} | 预计合并时长: {tot_dur_str} | 预估总大小: {tot_size_str}"
             )
         else:
             self.lbl_summary.setText("统计: 暂无待合并文件")
@@ -447,7 +615,7 @@ class TabMerge(QWidget):
             if len(warnings) > 5:
                 warn_msg += f"\n... 以及其他 {len(warnings) - 5} 项差异"
             warn_msg += "\n\n免重编码合并要求视频规格严格一致，强制合并可能导致播放黑屏或画面异常。\n\n是否仍然继续合并？"
-            
+
             reply = QMessageBox.question(
                 self, "参数差异提示", warn_msg,
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
@@ -465,21 +633,28 @@ class TabMerge(QWidget):
         self.btn_remove.setEnabled(False)
         self.btn_clear.setEnabled(False)
 
-        self.lbl_prog_title.setText(f"正在合并 {len(self.items)} 个片段...")
+        cropped_count = sum(1 for it in self.items if it.is_cropped)
+        if cropped_count > 0:
+            self.lbl_prog_title.setText(f"正在预裁剪 {cropped_count} 个片段并合并...")
+        else:
+            self.lbl_prog_title.setText(f"正在合并 {len(self.items)} 个片段...")
+
         self.prog_bar.setValue(0)
-        self.lbl_exec_status.setText("正在执行无损合并...")
+        self.lbl_exec_status.setText("正在执行处理...")
 
-        total_sec = sum(item.duration for item in self.items)
-        file_paths = [item.filepath for item in self.items]
-
-        self.worker = MergeWorker(file_paths, out_path, total_sec, parent=self)
+        self.worker = MergeWorker(self.items, out_path, parent=self)
         self.worker.progress_changed.connect(self._on_worker_progress)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.start()
 
     def _on_worker_progress(self, percent: float, speed: str, eta_str: str):
         self.prog_bar.setValue(int(percent))
-        self.lbl_prog_stats.setText(f"进度: {percent:.1f}%  |  速率: {speed}  |  预计剩余: {eta_str}")
+        if speed == "极速流复制":
+            self.lbl_prog_title.setText(eta_str)
+            self.lbl_prog_stats.setText(f"进度: {percent:.1f}%  |  阶段: 极速预裁剪")
+        else:
+            self.lbl_prog_title.setText(f"正在无损合并 {len(self.items)} 个片段...")
+            self.lbl_prog_stats.setText(f"进度: {percent:.1f}%  |  速率: {speed}  |  预计剩余: {eta_str}")
 
     def _on_worker_finished(self, success: bool, msg: str, out_path: str):
         self.btn_start.setEnabled(True)

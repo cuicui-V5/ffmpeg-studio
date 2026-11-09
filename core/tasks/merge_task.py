@@ -28,6 +28,25 @@ class MergeItem:
     error_msg: str = ""
     is_consistent: bool = True
     mismatched_reasons: list[str] = field(default_factory=list)
+    # 裁剪支持
+    is_cropped: bool = False
+    crop_start: float = 0.0
+    crop_end: float = 0.0
+    snapped_start: float = 0.0
+    snapped_end: float = 0.0
+
+    @property
+    def effective_duration(self) -> float:
+        if self.is_cropped and self.snapped_end > self.snapped_start:
+            return self.snapped_end - self.snapped_start
+        return self.duration
+
+    @property
+    def effective_size(self) -> int:
+        if self.is_cropped and self.duration > 0:
+            ratio = self.effective_duration / self.duration
+            return int(self.size * min(1.0, max(0.01, ratio)))
+        return self.size
 
 def validate_merge_consistency(items: list[MergeItem]) -> tuple[bool, str, list[str]]:
     """
@@ -107,19 +126,25 @@ def validate_merge_consistency(items: list[MergeItem]) -> tuple[bool, str, list[
     return all_consistent, summary, warnings
 
 class MergeWorker(QThread):
-    """后台无损合并执行线程 (基于 FFmpeg Concat Demuxer)"""
+    """后台无损合并执行线程 (支持先预裁剪后无损合并)"""
     progress_changed = Signal(float, str, str)  # (percent: 0-100, speed, eta_str)
     log_emitted = Signal(str)
     finished = Signal(bool, str, str)           # (success, message, output_path)
 
-    def __init__(self, file_paths: list[Path], output_path: Path, total_duration: float, parent=None):
+    def __init__(self, items, output_path: Path, total_duration: float = 0.0, parent=None):
         super().__init__(parent)
-        self.file_paths = file_paths
-        self.output_path = output_path
-        self.total_duration = total_duration
+        # 兼容 list[MergeItem] 或 list[Path]
+        if items and isinstance(items[0], Path):
+            self.items = [MergeItem(filepath=p, filename=p.name, duration=total_duration / len(items)) for p in items]
+        else:
+            self.items = list(items)
+
+        self.output_path = Path(output_path)
+        self.total_duration = total_duration if total_duration > 0 else sum(it.effective_duration for it in self.items)
         self._proc = None
         self._is_cancelled = False
         self._list_file = None
+        self._temp_dir = None
 
     def cancel(self):
         self._is_cancelled = True
@@ -129,20 +154,28 @@ class MergeWorker(QThread):
                 self._proc.kill()
             except Exception:
                 pass
-        self._cleanup_temp_file()
+        self._cleanup_temp_files()
         if self.output_path and self.output_path.exists():
             try:
                 self.output_path.unlink()
             except Exception:
                 pass
 
-    def _cleanup_temp_file(self):
+    def _cleanup_temp_files(self):
         if self._list_file and os.path.exists(self._list_file):
             try:
                 os.remove(self._list_file)
             except Exception:
                 pass
             self._list_file = None
+
+        if self._temp_dir and os.path.exists(self._temp_dir):
+            try:
+                import shutil
+                shutil.rmtree(self._temp_dir, ignore_errors=True)
+            except Exception:
+                pass
+            self._temp_dir = None
 
     def run(self):
         self._is_cancelled = False
@@ -151,26 +184,87 @@ class MergeWorker(QThread):
             self.finished.emit(False, "未找到 ffmpeg 可执行文件，无法合并", "")
             return
 
-        if len(self.file_paths) < 2:
+        if len(self.items) < 2:
             self.finished.emit(False, "待合并的视频数量少于 2 个", "")
             return
 
         out_folder = self.output_path.parent
         out_folder.mkdir(parents=True, exist_ok=True)
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
-        # 1. 生成标准的 FFmpeg Concat 列表文件
+        # 1. 预裁剪处理（如果有被标记裁剪的视频）
+        cropped_items = [(idx, item) for idx, item in enumerate(self.items) if item.is_cropped]
+        concat_input_paths: list[Path] = []
+
+        if cropped_items:
+            self._temp_dir = out_folder / f".tmp_cut_{uuid.uuid4().hex[:8]}"
+            self._temp_dir.mkdir(parents=True, exist_ok=True)
+            self.log_emitted.emit(f"检测到 {len(cropped_items)} 个需要预裁剪的片段，开始极速流复制预裁剪...")
+
+            total_cropped = len(cropped_items)
+            for crop_i, (idx, item) in enumerate(cropped_items):
+                if self._is_cancelled:
+                    self._cleanup_temp_files()
+                    self.finished.emit(False, "任务已被用户取消", "")
+                    return
+
+                percent = (crop_i / max(1, total_cropped)) * 30.0  # 预裁剪阶段占前 30% 进度
+                self.progress_changed.emit(
+                    percent, "极速流复制",
+                    f"预裁剪片段 {crop_i + 1}/{total_cropped}"
+                )
+                temp_cut_file = self._temp_dir / f"cut_{idx:03d}_{item.filepath.name}"
+
+                cmd_cut = [
+                    tool_ffmpeg, '-y', '-hide_banner',
+                    '-ss', str(item.snapped_start),
+                    '-to', str(item.snapped_end),
+                    '-i', str(item.filepath),
+                    '-c', 'copy',
+                    '-avoid_negative_ts', 'make_zero',
+                    str(temp_cut_file)
+                ]
+                self.log_emitted.emit(f"[预裁剪] {item.filename} ({item.snapped_start:.2f}s -> {item.snapped_end:.2f}s)")
+
+                try:
+                    self._proc = subprocess.Popen(
+                        cmd_cut,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        errors='ignore',
+                        creationflags=creationflags
+                    )
+                    self._proc.communicate()
+                    if self._proc.returncode != 0:
+                        self._cleanup_temp_files()
+                        self.finished.emit(False, f"预裁剪片段 {item.filename} 失败", "")
+                        return
+                except Exception as e:
+                    self._cleanup_temp_files()
+                    self.finished.emit(False, f"预裁剪异常: {e}", "")
+                    return
+
+        # 组装最终 concat 列表
+        for idx, item in enumerate(self.items):
+            if item.is_cropped:
+                concat_input_paths.append(self._temp_dir / f"cut_{idx:03d}_{item.filepath.name}")
+            else:
+                concat_input_paths.append(item.filepath)
+
+        # 2. 生成标准的 FFmpeg Concat 列表文件
         self._list_file = out_folder / f"concat_list_{uuid.uuid4().hex[:8]}.txt"
         try:
             with open(self._list_file, "w", encoding="utf-8") as f:
-                for p in self.file_paths:
-                    # 将路径转为正斜杠并对单引号转义
+                for p in concat_input_paths:
                     clean_str = str(p.resolve()).replace('\\', '/').replace("'", "'\\''")
                     f.write(f"file '{clean_str}'\n")
         except Exception as e:
+            self._cleanup_temp_files()
             self.finished.emit(False, f"创建合并列表文件失败: {e}", "")
             return
 
-        # 2. 构建 FFmpeg 极速流复制无损合并命令
+        # 3. 构建 FFmpeg 极速流复制无损合并命令
         cmd = [
             tool_ffmpeg, '-y', '-hide_banner',
             '-f', 'concat', '-safe', '0',
@@ -179,10 +273,10 @@ class MergeWorker(QThread):
             str(self.output_path)
         ]
 
-        self.log_emitted.emit(f"开始无损合并: {len(self.file_paths)} 个视频片段")
+        total_effective_duration = sum(item.effective_duration for item in self.items)
+        self.log_emitted.emit(f"开始无损合并: {len(self.items)} 个视频片段")
         self.log_emitted.emit(f"[EXEC] {' '.join(cmd)}\n")
 
-        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             self._proc = subprocess.Popen(
                 cmd,
@@ -197,6 +291,8 @@ class MergeWorker(QThread):
             out_time_pattern = re.compile(r'time=(\d{2}):(\d{2}):(\d{2}\.\d+)')
             speed_pattern = re.compile(r'speed=\s*([\d\.]+)x')
 
+            start_percent = 30.0 if cropped_items else 0.0
+
             for line in self._proc.stdout:
                 if self._is_cancelled:
                     break
@@ -210,14 +306,15 @@ class MergeWorker(QThread):
 
                 cur_speed = f"{spd_m.group(1)}x" if spd_m else "--"
 
-                if time_m and self.total_duration > 0:
+                if time_m and total_effective_duration > 0:
                     h, m, s = float(time_m.group(1)), float(time_m.group(2)), float(time_m.group(3))
                     cur_sec = h * 3600 + m * 60 + s
-                    percent = min(99.0, max(0.0, (cur_sec / self.total_duration) * 100.0))
+                    ratio = min(0.99, max(0.0, cur_sec / total_effective_duration))
+                    percent = start_percent + ratio * (100.0 - start_percent)
 
                     eta_str = "--:--"
                     spd_val = float(spd_m.group(1)) if spd_m else 0.0
-                    rem_sec = max(0.0, self.total_duration - cur_sec)
+                    rem_sec = max(0.0, total_effective_duration - cur_sec)
                     if spd_val > 0.1:
                         eta_sec = rem_sec / spd_val
                         eta_str = f"{int(eta_sec // 60):02d}:{int(eta_sec % 60):02d}"
@@ -226,8 +323,8 @@ class MergeWorker(QThread):
 
             self._proc.wait()
 
-            # 清理临时列表文件
-            self._cleanup_temp_file()
+            # 清理临时列表与裁剪文件
+            self._cleanup_temp_files()
 
             if self._is_cancelled:
                 self.finished.emit(False, "任务已被用户取消", "")
@@ -240,5 +337,5 @@ class MergeWorker(QThread):
                 self.finished.emit(False, f"合并失败: 错误代码 {self._proc.returncode}", "")
 
         except Exception as e:
-            self._cleanup_temp_file()
+            self._cleanup_temp_files()
             self.finished.emit(False, f"执行异常: {e}", "")
