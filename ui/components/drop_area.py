@@ -18,7 +18,7 @@ class DropArea(QFrame):
         layout.setAlignment(Qt.AlignCenter)
         layout.setContentsMargins(20, 24, 20, 24)
 
-        self.title_label = QLabel(f"📂  {title}")
+        self.title_label = QLabel(title)
         self.title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #00d2ff;")
         self.title_label.setAlignment(Qt.AlignCenter)
 

@@ -17,7 +17,7 @@ class VideoCanvas(QLabel):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet("background-color: #0b0c0e; border-radius: 6px; color: #5c6370; font-size: 14px;")
-        self.setText("🎬 点击或拖入视频文件以开始预览")
+        self.setText("拖入或选择视频预览")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._current_pixmap = None
 
@@ -126,7 +126,7 @@ class VideoPlayerWidget(QWidget):
         self.range_slider.range_changed.connect(self._on_range_slider_changed)
         self.range_slider.handle_scrubbing.connect(self._on_range_scrubbing)
 
-        self.range_time_label = QLabel("00:00:00 ➔ 00:00:00")
+        self.range_time_label = QLabel("00:00:00 -> 00:00:00")
         self.range_time_label.setFixedWidth(145)
         self.range_time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #00d2ff;")
 
@@ -139,7 +139,7 @@ class VideoPlayerWidget(QWidget):
         btn_bar = QHBoxLayout()
         btn_bar.setSpacing(8)
 
-        self.btn_play = QPushButton("▶ 播放")
+        self.btn_play = QPushButton("播放")
         self.btn_play.setFixedWidth(80)
         self.btn_play.clicked.connect(self.toggle_play)
 
@@ -151,11 +151,11 @@ class VideoPlayerWidget(QWidget):
         self.btn_step_forward.setFixedWidth(50)
         self.btn_step_forward.clicked.connect(lambda: self.seek_relative(1.0))
 
-        self.btn_mark_in = QPushButton("📍 标记为裁切起点")
+        self.btn_mark_in = QPushButton("设置起点")
         self.btn_mark_in.setStyleSheet("background-color: #2c3e50; border: 1px solid #00d2ff; color: #00d2ff; font-weight: bold;")
         self.btn_mark_in.clicked.connect(self._trigger_mark_in)
 
-        self.btn_mark_out = QPushButton("🏁 标记为裁切终点")
+        self.btn_mark_out = QPushButton("设置终点")
         self.btn_mark_out.setStyleSheet("background-color: #3b2a30; border: 1px solid #e06c75; color: #e06c75; font-weight: bold;")
         self.btn_mark_out.clicked.connect(self._trigger_mark_out)
 
@@ -208,7 +208,7 @@ class VideoPlayerWidget(QWidget):
             self.seek_and_display(0.0)
 
         except Exception as e:
-            self.canvas.setText(f"❌ 视频加载失败: {e}")
+            self.canvas.setText(f"视频加载失败: {e}")
 
     def _decode_and_render_frame(self, seconds: float):
         """核心底层解码并上屏单帧画面"""
@@ -270,13 +270,13 @@ class VideoPlayerWidget(QWidget):
         if not self.container:
             return
         self._is_playing = True
-        self.btn_play.setText("⏸ 暂停")
+        self.btn_play.setText("暂停")
         interval_ms = max(15, int(1000.0 / min(self.fps, 40.0)))
         self.play_timer.start(interval_ms)
 
     def pause(self):
         self._is_playing = False
-        self.btn_play.setText("▶ 播放")
+        self.btn_play.setText("播放")
         self.play_timer.stop()
 
     def seek_relative(self, delta_sec: float):
@@ -345,7 +345,7 @@ class VideoPlayerWidget(QWidget):
     def _update_range_time_label(self, in_sec: float, out_sec: float):
         in_fmt = KeyframeHelper.format_time(in_sec, show_ms=False)
         out_fmt = KeyframeHelper.format_time(out_sec, show_ms=False)
-        self.range_time_label.setText(f"{in_fmt} ➔ {out_fmt}")
+        self.range_time_label.setText(f"{in_fmt} -> {out_fmt}")
 
     def close(self):
         self.pause()

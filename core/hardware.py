@@ -61,14 +61,14 @@ class HardwareDetector:
             has_qsv = any(os.path.exists(p) for p in qsv_paths)
 
         return {
-            "hevc_nvenc": {"supported": has_nvenc, "desc": "NVIDIA NVENC (HEVC / H.265)"},
-            "h264_nvenc": {"supported": has_nvenc, "desc": "NVIDIA NVENC (AVC / H.264)"},
-            "hevc_qsv": {"supported": has_qsv, "desc": "Intel QuickSync (HEVC / H.265)"},
-            "h264_qsv": {"supported": has_qsv, "desc": "Intel QuickSync (AVC / H.264)"},
-            "hevc_amf": {"supported": has_amf, "desc": "AMD AMF (HEVC / H.265)"},
-            "h264_amf": {"supported": has_amf, "desc": "AMD AMF (AVC / H.264)"},
-            "libx265": {"supported": True, "desc": "CPU 软件编码 (libx265)"},
-            "libx264": {"supported": True, "desc": "CPU 软件编码 (libx264)"}
+            "hevc_nvenc": {"supported": has_nvenc, "desc": "NVIDIA NVENC H.265"},
+            "h264_nvenc": {"supported": has_nvenc, "desc": "NVIDIA NVENC H.264"},
+            "hevc_qsv": {"supported": has_qsv, "desc": "Intel QuickSync H.265"},
+            "h264_qsv": {"supported": has_qsv, "desc": "Intel QuickSync H.264"},
+            "hevc_amf": {"supported": has_amf, "desc": "AMD AMF H.265"},
+            "h264_amf": {"supported": has_amf, "desc": "AMD AMF H.264"},
+            "libx265": {"supported": True, "desc": "CPU 软件编码 libx265"},
+            "libx264": {"supported": True, "desc": "CPU 软件编码 libx264"}
         }
 
     @classmethod
@@ -102,14 +102,14 @@ class HardwareDetector:
             return probe_res
 
         encoders = {
-            "hevc_nvenc": "NVIDIA NVENC (HEVC / H.265)",
-            "h264_nvenc": "NVIDIA NVENC (AVC / H.264)",
-            "hevc_qsv": "Intel QuickSync (HEVC / H.265)",
-            "h264_qsv": "Intel QuickSync (AVC / H.264)",
-            "hevc_amf": "AMD AMF (HEVC / H.265)",
-            "h264_amf": "AMD AMF (AVC / H.264)",
-            "libx265": "CPU 软件编码 (libx265)",
-            "libx264": "CPU 软件编码 (libx264)"
+            "hevc_nvenc": "NVIDIA NVENC H.265",
+            "h264_nvenc": "NVIDIA NVENC H.264",
+            "hevc_qsv": "Intel QuickSync H.265",
+            "h264_qsv": "Intel QuickSync H.264",
+            "hevc_amf": "AMD AMF H.265",
+            "h264_amf": "AMD AMF H.264",
+            "libx265": "CPU 软件编码 libx265",
+            "libx264": "CPU 软件编码 libx264"
         }
 
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0

@@ -53,42 +53,42 @@ def validate_merge_consistency(items: list[MergeItem]) -> tuple[bool, str, list[
 
         # 1. 视频编码校验
         if item.codec != ref.codec:
-            msg = f"视频编码不一致: 【{item.codec}】 (基准: 【{ref.codec}】)"
+            msg = f"编码不一致: {item.codec}，基准: {ref.codec}"
             item.mismatched_reasons.append(msg)
-            warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+            warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
 
         # 2. 分辨率校验 (流复制最敏感核心参数)
         if item.width != ref.width or item.height != ref.height:
-            msg = f"分辨率不一致: 【{item.width}x{item.height}】 (基准: 【{ref.width}x{ref.height}】)"
+            msg = f"分辨率不一致: {item.width}x{item.height}，基准: {ref.width}x{ref.height}"
             item.mismatched_reasons.append(msg)
-            warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+            warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
 
-        # 3. 像素格式校验 (yuv420p vs yuv420p10le 等)
+        # 3. 像素格式校验
         if item.pix_fmt and ref.pix_fmt and item.pix_fmt != ref.pix_fmt:
-            msg = f"像素格式不一致: 【{item.pix_fmt}】 (基准: 【{ref.pix_fmt}】)"
+            msg = f"像素格式不一致: {item.pix_fmt}，基准: {ref.pix_fmt}"
             item.mismatched_reasons.append(msg)
-            warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+            warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
 
-        # 4. 帧率校验 (允许 0.5 fps 正常范围内的误差容忍，如 29.97 vs 30)
+        # 4. 帧率校验
         if abs(item.fps - ref.fps) >= 0.5:
-            msg = f"帧率差异较大: 【{item.fps:.1f} fps】 (基准: 【{ref.fps:.1f} fps】)"
+            msg = f"帧率差异较大: {item.fps:.1f} fps，基准: {ref.fps:.1f} fps"
             item.mismatched_reasons.append(msg)
-            warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+            warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
 
         # 5. 音频流校验
         if item.audio_codec != ref.audio_codec:
-            msg = f"音频编码不一致: 【{item.audio_codec}】 (基准: 【{ref.audio_codec}】)"
+            msg = f"音频编码不一致: {item.audio_codec}，基准: {ref.audio_codec}"
             item.mismatched_reasons.append(msg)
-            warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+            warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
         elif item.audio_codec != "none":
             if item.sample_rate != ref.sample_rate:
-                msg = f"音频采样率不一致: 【{item.sample_rate}Hz】 (基准: 【{ref.sample_rate}Hz】)"
+                msg = f"音频采样率不一致: {item.sample_rate}Hz，基准: {ref.sample_rate}Hz"
                 item.mismatched_reasons.append(msg)
-                warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+                warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
             if item.channels != ref.channels:
-                msg = f"音频声道数不一致: 【{item.channels}声道】 (基准: 【{ref.channels}声道】)"
+                msg = f"音频声道数不一致: {item.channels}声道，基准: {ref.channels}声道"
                 item.mismatched_reasons.append(msg)
-                warnings.append(f"第 {idx+1} 个文件《{item.filename}》: {msg}")
+                warnings.append(f"第 {idx+1} 个文件 {item.filename}: {msg}")
 
         if item.mismatched_reasons:
             item.is_consistent = False
@@ -98,12 +98,11 @@ def validate_merge_consistency(items: list[MergeItem]) -> tuple[bool, str, list[
 
     if all_consistent:
         summary = (
-            f"✅ 参数完全一致！所有 {len(items)} 个视频的视频编码 ({ref.codec})、"
-            f"分辨率 ({ref.width}x{ref.height})、帧率 ({ref.fps:.0f}fps) 及音频完全匹配，"
-            f"支持免重编码极速无损合并（毫秒级导出）"
+            f"参数一致：所有 {len(items)} 个视频的编码、分辨率、帧率及音频参数完全匹配，"
+            f"支持无损合并。"
         )
     else:
-        summary = f"⚠️ 检测到 {len(warnings)} 处视频参数不一致！免重编码流复制合并可能导致播放黑屏、花屏或音画不同步。"
+        summary = f"参数差异：检测到 {len(warnings)} 项参数不一致，无损合并可能导致画面异常或音画不同步。"
 
     return all_consistent, summary, warnings
 
@@ -180,7 +179,7 @@ class MergeWorker(QThread):
             str(self.output_path)
         ]
 
-        self.log_emitted.emit(f"🚀 开始极速无损合并 ({len(self.file_paths)} 个视频片段)...")
+        self.log_emitted.emit(f"开始无损合并: {len(self.file_paths)} 个视频片段")
         self.log_emitted.emit(f"[EXEC] {' '.join(cmd)}\n")
 
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -236,9 +235,9 @@ class MergeWorker(QThread):
 
             if self._proc.returncode == 0:
                 self.progress_changed.emit(100.0, "--", "00:00")
-                self.finished.emit(True, "视频极速无损合并成功完成！", str(self.output_path))
+                self.finished.emit(True, "视频无损合并完成", str(self.output_path))
             else:
-                self.finished.emit(False, f"合并失败 (FFmpeg 退出代码: {self._proc.returncode})", "")
+                self.finished.emit(False, f"合并失败: 错误代码 {self._proc.returncode}", "")
 
         except Exception as e:
             self._cleanup_temp_file()

@@ -11,11 +11,11 @@ from core.tool_manager import tool_mgr
 from core.hardware import HardwareDetector
 
 class MainWindow(QMainWindow):
-    """FFmpeg 智能音视频多功能桌面工具箱主窗口"""
+    """FFmpeg 视频工具箱主窗口"""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FFmpeg Multi-Tool Studio — 智能音视频工作台")
+        self.setWindowTitle("FFmpeg 视频工具箱")
         self.resize(1200, 820)
         self.setMinimumSize(1000, 680)
         self.setAcceptDrops(True)
@@ -34,11 +34,11 @@ class MainWindow(QMainWindow):
         self.tab_merge = TabMerge()
         self.tab_settings = TabSettings()
 
-        self.tab_widget.addTab(self.tab_compress, "🎬 批量压制 1080p (元数据保护)")
-        self.tab_widget.addTab(self.tab_cutter, "✂️ 极速裁切 (内嵌预览·对齐关键帧)")
-        self.tab_widget.addTab(self.tab_split, "📦 平台智能分段 (QQ/微信/社交限制)")
-        self.tab_widget.addTab(self.tab_merge, "🧩 极速无损合并 (参数自动校验)")
-        self.tab_widget.addTab(self.tab_settings, "⚙️ 工具与硬件加速诊断")
+        self.tab_widget.addTab(self.tab_compress, "批量压制")
+        self.tab_widget.addTab(self.tab_cutter, "视频裁剪")
+        self.tab_widget.addTab(self.tab_split, "视频分段")
+        self.tab_widget.addTab(self.tab_merge, "视频合并")
+        self.tab_widget.addTab(self.tab_settings, "环境诊断")
 
         main_layout.addWidget(self.tab_widget)
         self.setCentralWidget(central_widget)
@@ -56,9 +56,9 @@ class MainWindow(QMainWindow):
         best_enc = HardwareDetector.get_best_hevc_encoder()
 
         status_text = (
-            f"FFmpeg: {'🟢 就绪' if ffmpeg_ok else '🔴 未找到'}  |  "
-            f"ExifTool: {'🟢 就绪' if exif_ok else '🔴 未找到'}  |  "
-            f"硬件加速推荐: ⚡ {best_enc}"
+            f"FFmpeg: {'已就绪' if ffmpeg_ok else '未找到'}  |  "
+            f"ExifTool: {'已就绪' if exif_ok else '未找到'}  |  "
+            f"推荐编码器: {best_enc}"
         )
         lbl_info = QLabel(status_text)
         lbl_info.setStyleSheet("padding-left: 10px; color: #abb2bf; font-size: 12px;")

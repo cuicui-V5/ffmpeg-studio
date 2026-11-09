@@ -16,7 +16,7 @@ from core.tasks.merge_task import (
 from core.keyframe_helper import KeyframeHelper
 
 class TabMerge(QWidget):
-    """选项卡：视频无损合并 (基于 FFmpeg Concat Demuxer + 自动参数一致性校验)"""
+    """视频合并"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,24 +33,24 @@ class TabMerge(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(8)
 
-        self.btn_add_files = QPushButton("➕ 添加视频文件")
+        self.btn_add_files = QPushButton("添加文件")
         self.btn_add_files.clicked.connect(self._choose_files)
 
-        self.btn_add_folder = QPushButton("📁 添加整个文件夹")
+        self.btn_add_folder = QPushButton("添加文件夹")
         self.btn_add_folder.clicked.connect(self._choose_folder)
 
-        self.btn_move_up = QPushButton("⬆️ 上移")
+        self.btn_move_up = QPushButton("上移")
         self.btn_move_up.setToolTip("将选中的视频在合并序列中上移")
         self.btn_move_up.clicked.connect(self._move_up)
 
-        self.btn_move_down = QPushButton("⬇️ 下移")
+        self.btn_move_down = QPushButton("下移")
         self.btn_move_down.setToolTip("将选中的视频在合并序列中下移")
         self.btn_move_down.clicked.connect(self._move_down)
 
-        self.btn_remove = QPushButton("🗑 移除选中")
+        self.btn_remove = QPushButton("移除")
         self.btn_remove.clicked.connect(self._remove_selected)
 
-        self.btn_clear = QPushButton("🗑 清空列表")
+        self.btn_clear = QPushButton("清空列表")
         self.btn_clear.clicked.connect(self._clear_list)
 
         top_bar.addWidget(self.btn_add_files)
@@ -63,20 +63,16 @@ class TabMerge(QWidget):
         top_bar.addStretch()
         layout.addLayout(top_bar)
 
-        # 2. 参数一致性检测指示看板 (动态颜色切换)
+        # 2. 参数一致性检测指示看板
         self.card_status = QFrame()
         self.card_status.setObjectName("cardStatus")
         card_layout = QHBoxLayout(self.card_status)
         card_layout.setContentsMargins(14, 10, 14, 10)
 
-        self.lbl_status_icon = QLabel("💡")
-        self.lbl_status_icon.setStyleSheet("font-size: 18px;")
-        self.lbl_status_text = QLabel("请添加或拖入待合并的视频文件，系统将自动校验编码、分辨率、帧率及音频参数。")
+        self.lbl_status_text = QLabel("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。")
         self.lbl_status_text.setStyleSheet("font-size: 13px; font-weight: 500;")
         self.lbl_status_text.setWordWrap(True)
 
-        card_layout.addWidget(self.lbl_status_icon)
-        card_layout.addSpacing(6)
         card_layout.addWidget(self.lbl_status_text, stretch=1)
         self._apply_banner_style("neutral")
         layout.addWidget(self.card_status)
@@ -84,7 +80,7 @@ class TabMerge(QWidget):
         # 3. 待合并视频列表表格
         self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels([
-            "序号", "文件名", "分辨率", "编码格式", "帧率", "音频流", "时长", "大小", "一致性状态"
+            "序号", "文件名", "分辨率", "编码格式", "帧率", "音频流", "时长", "大小", "状态"
         ])
         self.table.setCornerButtonEnabled(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -97,17 +93,17 @@ class TabMerge(QWidget):
         self.table.setColumnWidth(5, 140)
         self.table.setColumnWidth(6, 90)
         self.table.setColumnWidth(7, 90)
-        self.table.setColumnWidth(8, 120)
+        self.table.setColumnWidth(8, 100)
         layout.addWidget(self.table, stretch=1)
 
         # 4. 底部执行控制面板
-        bottom_box = QGroupBox("执行进度与合并设置")
+        bottom_box = QGroupBox("执行操作")
         bottom_layout = QVBoxLayout(bottom_box)
         bottom_layout.setContentsMargins(14, 10, 14, 10)
         bottom_layout.setSpacing(8)
 
         # 统计信息
-        self.lbl_summary = QLabel("统计：暂无待合并文件")
+        self.lbl_summary = QLabel("统计: 暂无待合并文件")
         self.lbl_summary.setStyleSheet("color: #abb2bf; font-weight: bold; font-size: 12px;")
         bottom_layout.addWidget(self.lbl_summary)
 
@@ -145,14 +141,14 @@ class TabMerge(QWidget):
         self.lbl_exec_status = QLabel("准备就绪")
         self.lbl_exec_status.setStyleSheet("color: #98c379;")
 
-        self.btn_open_dir = QPushButton("📂 打开输出目录")
+        self.btn_open_dir = QPushButton("打开输出目录")
         self.btn_open_dir.clicked.connect(self._open_output_dir)
 
-        self.btn_cancel = QPushButton("⏹ 取消合并")
+        self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel_merge)
 
-        self.btn_start = QPushButton("⚡ 开始极速无损合并")
+        self.btn_start = QPushButton("开始合并")
         self.btn_start.setObjectName("primaryBtn")
         self.btn_start.setFixedHeight(36)
         self.btn_start.clicked.connect(self._start_merge)
@@ -171,25 +167,21 @@ class TabMerge(QWidget):
             self.card_status.setStyleSheet(
                 "QFrame#cardStatus { background-color: #1a2e22; border: 1px solid #98c379; border-radius: 6px; }"
             )
-            self.lbl_status_icon.setText("✅")
             self.lbl_status_text.setStyleSheet("color: #98c379; font-size: 13px; font-weight: bold;")
         elif state == "warning":
             self.card_status.setStyleSheet(
                 "QFrame#cardStatus { background-color: #38241e; border: 1px solid #e5c07b; border-radius: 6px; }"
             )
-            self.lbl_status_icon.setText("⚠️")
             self.lbl_status_text.setStyleSheet("color: #e5c07b; font-size: 13px; font-weight: bold;")
         elif state == "error":
             self.card_status.setStyleSheet(
                 "QFrame#cardStatus { background-color: #381e23; border: 1px solid #e06c75; border-radius: 6px; }"
             )
-            self.lbl_status_icon.setText("❌")
             self.lbl_status_text.setStyleSheet("color: #e06c75; font-size: 13px; font-weight: bold;")
         else: # neutral
             self.card_status.setStyleSheet(
                 "QFrame#cardStatus { background-color: #21252b; border: 1px solid #3e4451; border-radius: 6px; }"
             )
-            self.lbl_status_icon.setText("💡")
             self.lbl_status_text.setStyleSheet("color: #abb2bf; font-size: 13px;")
 
     def dragEnterEvent(self, event):
@@ -241,7 +233,6 @@ class TabMerge(QWidget):
             if resolved in existing:
                 continue
             
-            # 读取元数据
             info = KeyframeHelper.get_video_info(str(resolved))
             if not info or info.get("duration", 0) <= 0:
                 continue
@@ -276,7 +267,6 @@ class TabMerge(QWidget):
             self.edit_output.setText(str(out_file))
 
     def _on_output_path_edited(self, text: str):
-        # 用户手动修改后不再自动覆盖
         if text.strip():
             self._user_custom_output = True
 
@@ -334,10 +324,10 @@ class TabMerge(QWidget):
         # 2. 更新状态指示卡片
         if not self.items:
             self._apply_banner_style("neutral")
-            self.lbl_status_text.setText("请添加或拖入待合并的视频文件，系统将自动校验编码、分辨率、帧率及音频参数。")
+            self.lbl_status_text.setText("拖入或添加待合并视频文件，系统将自动校验视频参数是否一致。")
         elif len(self.items) == 1:
             self._apply_banner_style("neutral")
-            self.lbl_status_text.setText("💡 当前仅添加了 1 个视频文件，请至少添加 2 个文件进行合并。")
+            self.lbl_status_text.setText("当前仅添加了 1 个视频文件，请至少添加 2 个文件进行合并。")
         elif is_consistent:
             self._apply_banner_style("success")
             self.lbl_status_text.setText(summary)
@@ -368,7 +358,7 @@ class TabMerge(QWidget):
             res_item.setTextAlignment(Qt.AlignCenter)
             if row > 0 and (item.width != self.items[0].width or item.height != self.items[0].height):
                 res_item.setForeground(QColor("#e06c75"))
-                res_item.setToolTip(f"与基准视频分辨率 ({self.items[0].width}x{self.items[0].height}) 不一致！")
+                res_item.setToolTip(f"与基准视频分辨率不一致: {self.items[0].width}x{self.items[0].height}")
             self.table.setItem(row, 2, res_item)
 
             # 编码格式
@@ -377,7 +367,7 @@ class TabMerge(QWidget):
             codec_item.setTextAlignment(Qt.AlignCenter)
             if row > 0 and item.codec != self.items[0].codec:
                 codec_item.setForeground(QColor("#e06c75"))
-                codec_item.setToolTip(f"与基准视频编码 ({self.items[0].codec}) 不一致！")
+                codec_item.setToolTip(f"与基准视频编码不一致: {self.items[0].codec}")
             self.table.setItem(row, 3, codec_item)
 
             # 帧率
@@ -386,12 +376,12 @@ class TabMerge(QWidget):
             fps_item.setTextAlignment(Qt.AlignCenter)
             if row > 0 and abs(item.fps - self.items[0].fps) >= 0.5:
                 fps_item.setForeground(QColor("#e5c07b"))
-                fps_item.setToolTip(f"帧率与基准 ({self.items[0].fps:.1f} fps) 存在差异")
+                fps_item.setToolTip(f"帧率与基准存在差异: {self.items[0].fps:.1f} fps")
             self.table.setItem(row, 4, fps_item)
 
             # 音频流
             if item.audio_codec != "none":
-                aud_str = f"{item.audio_codec} ({item.sample_rate}Hz, {item.channels}ch)"
+                aud_str = f"{item.audio_codec} {item.sample_rate}Hz {item.channels}ch"
             else:
                 aud_str = "无音频流"
             aud_item = QTableWidgetItem(aud_str)
@@ -412,15 +402,15 @@ class TabMerge(QWidget):
             size_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 7, size_item)
 
-            # 一致性状态
+            # 状态
             if row == 0:
-                status_item = QTableWidgetItem("👑 基准参考")
+                status_item = QTableWidgetItem("基准参考")
                 status_item.setForeground(QColor("#00d2ff"))
             elif item.is_consistent:
-                status_item = QTableWidgetItem("✅ 参数一致")
+                status_item = QTableWidgetItem("一致")
                 status_item.setForeground(QColor("#98c379"))
             else:
-                status_item = QTableWidgetItem("❌ 参数差异")
+                status_item = QTableWidgetItem("存在差异")
                 status_item.setForeground(QColor("#e06c75"))
                 status_item.setToolTip("\n".join(item.mismatched_reasons))
             status_item.setTextAlignment(Qt.AlignCenter)
@@ -432,19 +422,19 @@ class TabMerge(QWidget):
             tot_mb = total_bytes / (1024 * 1024)
             tot_size_str = f"{tot_mb / 1024:.2f} GB" if tot_mb >= 1024 else f"{tot_mb:.1f} MB"
             self.lbl_summary.setText(
-                f"已就绪：共 {len(self.items)} 个待合并视频  |  预计合并后总时长: {tot_dur_str}  |  总文件大小: {tot_size_str}"
+                f"统计: 共 {len(self.items)} 个文件 | 预计合并时长: {tot_dur_str} | 预估总大小: {tot_size_str}"
             )
         else:
-            self.lbl_summary.setText("统计：暂无待合并文件")
+            self.lbl_summary.setText("统计: 暂无待合并文件")
 
     def _start_merge(self):
         if len(self.items) < 2:
-            QMessageBox.warning(self, "数量不足", "请至少添加 2 个视频文件进行无损合并！")
+            QMessageBox.warning(self, "数量不足", "请至少添加 2 个视频文件进行无损合并。")
             return
 
         out_str = self.edit_output.text().strip()
         if not out_str:
-            QMessageBox.warning(self, "路径未指定", "请指定合并后视频的输出路径！")
+            QMessageBox.warning(self, "路径未指定", "请指定合并后视频的输出路径。")
             return
 
         out_path = Path(out_str)
@@ -452,14 +442,14 @@ class TabMerge(QWidget):
         # 检查参数一致性
         is_consistent, _, warnings = validate_merge_consistency(self.items)
         if not is_consistent:
-            warn_msg = "检测到以下视频与基准视频（第 1 项）参数不一致：\n\n"
+            warn_msg = "检测到以下视频与基准视频参数不一致：\n\n"
             warn_msg += "\n".join(warnings[:5])
             if len(warnings) > 5:
                 warn_msg += f"\n... 以及其他 {len(warnings) - 5} 项差异"
-            warn_msg += "\n\n⚠️ 免重编码无损合并（-c copy）要求所有视频的分辨率和编码完全一致，强制合并极可能导致播放黑屏、花屏或画面撕裂！\n\n是否仍然强制尝试合并？"
+            warn_msg += "\n\n免重编码合并要求视频规格严格一致，强制合并可能导致播放黑屏或画面异常。\n\n是否仍然继续合并？"
             
             reply = QMessageBox.question(
-                self, "参数不一致警告", warn_msg,
+                self, "参数差异提示", warn_msg,
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
             )
             if reply != QMessageBox.Yes:
@@ -475,9 +465,9 @@ class TabMerge(QWidget):
         self.btn_remove.setEnabled(False)
         self.btn_clear.setEnabled(False)
 
-        self.lbl_prog_title.setText(f"正在无损合并 ({len(self.items)} 个片段)...")
+        self.lbl_prog_title.setText(f"正在合并 {len(self.items)} 个片段...")
         self.prog_bar.setValue(0)
-        self.lbl_exec_status.setText("🚀 正在执行极速流复制...")
+        self.lbl_exec_status.setText("正在执行无损合并...")
 
         total_sec = sum(item.duration for item in self.items)
         file_paths = [item.filepath for item in self.items]
@@ -503,13 +493,13 @@ class TabMerge(QWidget):
 
         if success:
             self.prog_bar.setValue(100)
-            self.lbl_prog_title.setText("合并完成！")
-            self.lbl_prog_stats.setText("进度: 100%  |  耗时: 毫秒级极速导出完成")
-            self.lbl_exec_status.setText(f"✅ {msg}")
-            QMessageBox.information(self, "合并成功", f"🎉 视频极速无损合并完成！\n\n输出文件已保存至：\n{out_path}")
+            self.lbl_prog_title.setText("合并完成")
+            self.lbl_prog_stats.setText("进度: 100%  |  导出完成")
+            self.lbl_exec_status.setText(msg)
+            QMessageBox.information(self, "完成", f"视频无损合并完成。\n\n输出文件已保存至：\n{out_path}")
         else:
             self.lbl_prog_title.setText("合并中止或失败")
-            self.lbl_exec_status.setText(f"❌ {msg}")
+            self.lbl_exec_status.setText(msg)
             QMessageBox.critical(self, "合并失败", f"合并过程中出现问题：\n{msg}")
 
     def _cancel_merge(self):

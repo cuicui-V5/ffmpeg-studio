@@ -239,22 +239,22 @@ class BatchCompressWorker(QThread):
 
                 if self._current_proc.returncode != 0:
                     item.status = "失败"
-                    item.error_msg = f"FFmpeg 编码失败 (退出码: {self._current_proc.returncode})"
+                    item.error_msg = f"FFmpeg 编码失败: 退出码 {self._current_proc.returncode}"
                     self.item_updated.emit(idx, item.status, item.progress)
-                    self.log_emitted.emit(f"❌ 压制失败: {item.error_msg}")
+                    self.log_emitted.emit(f"压制失败: {item.error_msg}")
                     continue
 
             except Exception as e:
                 item.status = "失败"
                 item.error_msg = str(e)
                 self.item_updated.emit(idx, item.status, item.progress)
-                self.log_emitted.emit(f"❌ 压制发生异常: {e}")
+                self.log_emitted.emit(f"压制异常: {e}")
                 continue
 
             # 2. 调用 ExifTool 回写与补全元数据
             item.status = "写入元数据"
             self.item_updated.emit(idx, item.status, 99.0)
-            self.log_emitted.emit(f"📝 注入拍摄时间与 GPS 元数据...")
+            self.log_emitted.emit("写入拍摄时间与 GPS 元数据...")
 
             if tool_exif and os.path.exists(tool_exif):
                 cmd_exif = [
@@ -293,7 +293,7 @@ class BatchCompressWorker(QThread):
 
                 ret = subprocess.run(cmd_exif, capture_output=True, text=True, errors='ignore', creationflags=creationflags)
                 if ret.returncode != 0:
-                    self.log_emitted.emit(f"⚠️ ExifTool 提示: {ret.stderr.strip() or ret.stdout.strip()}")
+                    self.log_emitted.emit(f"ExifTool 提示: {ret.stderr.strip() or ret.stdout.strip()}")
 
             item.status = "已完成"
             item.progress = 100.0
@@ -301,6 +301,6 @@ class BatchCompressWorker(QThread):
             self.item_updated.emit(idx, item.status, 100.0)
             self.file_progress.emit(item.filename, 100.0, 0.0, "--", "00:00")
             self.overall_progress.emit(finished_count, total)
-            self.log_emitted.emit(f"✅ 处理成功: {item.output_path.name}")
+            self.log_emitted.emit(f"处理成功: {item.output_path.name}")
 
         self.all_finished.emit()

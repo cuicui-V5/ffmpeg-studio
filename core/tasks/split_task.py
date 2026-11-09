@@ -9,19 +9,19 @@ from core.keyframe_helper import KeyframeHelper
 
 # 预设配置
 PRESETS = {
-    "QQ 空间/群文件 (1GB / 9.5分钟)": {
+    "QQ文件限制": {
         "max_size": 1 * 1024 * 1024 * 1024,
         "max_duration": 585.0
     },
-    "微信朋友圈 / 视频号 (25MB / 30秒)": {
+    "微信朋友圈限制": {
         "max_size": 25 * 1024 * 1024,
         "max_duration": 30.0
     },
-    "微信聊天发送 (100MB / 5分钟)": {
+    "微信聊天限制": {
         "max_size": 100 * 1024 * 1024,
         "max_duration": 300.0
     },
-    "自定义规则 (自由设置)": {
+    "自定义限制": {
         "max_size": 500 * 1024 * 1024,
         "max_duration": 600.0
     }
@@ -127,16 +127,16 @@ class BatchSplitWorker(QThread):
                 target_file = out_folder / plan.filename
                 try:
                     shutil.copy2(plan.file_path, target_file)
-                    self.item_updated.emit(idx, "已完成 (直通)", 100.0)
+                    self.item_updated.emit(idx, "已完成", 100.0)
                     self.file_progress.emit(plan.filename, 100.0, "复制完成")
-                    self.log_emitted.emit(f"  ✅ 复制完成: {target_file.name}")
+                    self.log_emitted.emit(f"  复制完成: {target_file.name}")
                 except Exception as e:
                     self.item_updated.emit(idx, f"复制失败: {e}", 0.0)
                     self.file_progress.emit(plan.filename, 0.0, f"复制失败: {e}")
             else:
-                self.item_updated.emit(idx, f"切片中 (预计 {plan.part_count} 段)", 10.0)
-                self.file_progress.emit(plan.filename, 20.0, f"正在极速切分 (共 {plan.part_count} 段)...")
-                self.log_emitted.emit(f"  > 触发自动分段: 每段限时 {plan.split_time:.2f}s，预计切分 {plan.part_count} 段...")
+                self.item_updated.emit(idx, f"分段中", 10.0)
+                self.file_progress.emit(plan.filename, 20.0, f"正在分段处理...")
+                self.log_emitted.emit(f"  触发分段处理: 每段限时 {plan.split_time:.2f}s，预计切分 {plan.part_count} 段")
                 
                 output_pattern = str(out_folder / f"{plan.file_path.stem}_part%03d{plan.file_path.suffix}")
                 cmd = [
@@ -167,17 +167,17 @@ class BatchSplitWorker(QThread):
                         break
 
                     if self._proc.returncode == 0:
-                        self.item_updated.emit(idx, "已完成 (已分段)", 100.0)
-                        self.file_progress.emit(plan.filename, 100.0, f"切片成功完成 (生成 {plan.part_count} 个文件)")
-                        self.log_emitted.emit(f"  ✅ 极速切片完成！文件已存入: {out_folder}")
+                        self.item_updated.emit(idx, "已完成", 100.0)
+                        self.file_progress.emit(plan.filename, 100.0, f"切片完成，生成 {plan.part_count} 个文件")
+                        self.log_emitted.emit(f"  切片完成，文件已存入: {out_folder}")
                     else:
                         self.item_updated.emit(idx, "切片失败", 0.0)
                         self.file_progress.emit(plan.filename, 0.0, "切片失败")
-                        self.log_emitted.emit(f"  ❌ 切片失败: {out}")
+                        self.log_emitted.emit(f"  切片失败: {out}")
                 except Exception as e:
                     self.item_updated.emit(idx, f"异常: {e}", 0.0)
                     self.file_progress.emit(plan.filename, 0.0, f"异常: {e}")
-                    self.log_emitted.emit(f"  ❌ 异常: {e}")
+                    self.log_emitted.emit(f"  异常: {e}")
 
             self.overall_progress.emit(idx + 1, total)
 
