@@ -167,15 +167,21 @@ class KeyframeHelper:
             return {}
 
     @classmethod
-    def find_keyframe_instant(cls, container, stream, target_sec: float, mode: str = "floor") -> tuple[float, float]:
+    def find_keyframe_instant(cls, container, stream, target_sec: float, mode: str = "floor", duration: float = 0.0) -> tuple[float, float]:
         """
         利用已经打开的视频容器索引，在 1 毫秒内瞬间定位目标时间点邻近的关键帧
         - mode='floor'：吸附至前一个关键帧 (适合裁剪开始时间，确保以 IDR 关键帧启动)
         - mode='ceil'：吸附至后一个关键帧 (适合裁剪结束时间)
         返回 (吸附后秒数, 偏差秒数)
         """
-        if target_sec <= 0.02:
+        if target_sec <= 0.05:
             return 0.0, 0.0
+
+        if duration <= 0 and stream and getattr(stream, "duration", None):
+            duration = float(stream.duration * stream.time_base)
+
+        if duration > 0 and target_sec >= (duration - 0.08):
+            return round(duration, 3), 0.0
 
         if not container or not stream:
             return target_sec, 0.0
@@ -185,10 +191,12 @@ class KeyframeHelper:
             backward = (mode == "floor")
             container.seek(pts, stream=stream, any_frame=False, backward=backward)
             
-            for packet in container.demux(stream):
+            for idx, packet in enumerate(container.demux(stream)):
                 if packet.is_keyframe and packet.pts is not None:
                     kf_sec = float(packet.pts * stream.time_base)
                     return round(kf_sec, 3), round(kf_sec - target_sec, 3)
+                if idx > 15:
+                    break
         except Exception:
             pass
 

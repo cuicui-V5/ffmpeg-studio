@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QSlider, QLabel, QFrame, QSizePolicy
+    QSlider, QLabel, QFrame, QSizePolicy, QProgressBar
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QImage, QPixmap
 
 from core.keyframe_helper import KeyframeHelper
@@ -23,7 +23,16 @@ class VideoCanvas(QLabel):
 
     def display_pixmap(self, pixmap: QPixmap):
         self._current_pixmap = pixmap
+        self.setText("")
         self._update_display()
+
+    def show_loading(self, text: str = "正在载入视频画面与时间轴..."):
+        self._current_pixmap = None
+        self.setPixmap(QPixmap())
+        self.setText(text)
+        self.setStyleSheet(
+            "background-color: #0b0c0e; border-radius: 6px; color: #00d2ff; font-size: 14px; font-weight: bold;"
+        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -35,6 +44,36 @@ class VideoCanvas(QLabel):
                 self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             self.setPixmap(scaled)
+
+class VideoLoadWorker(QThread):
+    """后台视频异步加载线程，避免打开大型文件时阻塞主 UI"""
+    loaded = Signal(object, object, float, float) # (container, stream, duration, fps)
+    failed = Signal(str)
+
+    def __init__(self, file_path: str, parent=None):
+        super().__init__(parent)
+        self.file_path = file_path
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def run(self):
+        try:
+            import av
+            container = av.open(self.file_path)
+            if self._is_cancelled:
+                container.close()
+                return
+            stream = container.streams.video[0]
+            stream.thread_type = 'AUTO'
+            dur = float(stream.duration * stream.time_base) if stream.duration else 0.0
+            r_fps = stream.average_rate
+            fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
+            self.loaded.emit(container, stream, dur, fps)
+        except Exception as e:
+            if not self._is_cancelled:
+                self.failed.emit(str(e))
 
 class VideoPlayerWidget(QWidget):
     """
@@ -58,6 +97,8 @@ class VideoPlayerWidget(QWidget):
         self.current_sec = 0.0
         self._is_playing = False
         self._is_scrubbing = False
+        self._load_worker = None
+        self._on_loaded_callback = None
 
         # 播放定时器
         self.play_timer = QTimer(self)
@@ -78,6 +119,25 @@ class VideoPlayerWidget(QWidget):
         # 1. 视频视口
         self.canvas = VideoCanvas()
         layout.addWidget(self.canvas, stretch=1)
+
+        # 加载进度指示条 (细条动画，默认隐藏)
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setFixedHeight(3)
+        self.loading_bar.setTextVisible(False)
+        self.loading_bar.setRange(0, 0)
+        self.loading_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: #1e2025;
+                border: none;
+                border-radius: 1px;
+            }
+            QProgressBar::chunk {
+                background-color: #00d2ff;
+                border-radius: 1px;
+            }
+        """)
+        self.loading_bar.hide()
+        layout.addWidget(self.loading_bar)
 
         # 2. 控制面板卡片
         control_card = QFrame()
@@ -168,6 +228,61 @@ class VideoPlayerWidget(QWidget):
 
         control_layout.addLayout(btn_bar)
         layout.addWidget(control_card)
+
+    def load_video_async(self, file_path: str, on_loaded=None):
+        """后台异步加载视频，主 UI 保持响应不卡死，并带有加载动画指示"""
+        if not os.path.exists(file_path):
+            self.canvas.setText("未找到视频文件")
+            return
+
+        self.pause()
+        if self._load_worker and self._load_worker.isRunning():
+            self._load_worker.cancel()
+            self._load_worker.wait()
+            self._load_worker = None
+
+        if self.container:
+            try:
+                self.container.close()
+            except Exception:
+                pass
+            self.container = None
+
+        self.current_file = file_path
+        self.canvas.show_loading("正在载入视频画面与时间轴...")
+        self.loading_bar.show()
+
+        self._on_loaded_callback = on_loaded
+        self._load_worker = VideoLoadWorker(file_path, self)
+        self._load_worker.loaded.connect(self._on_async_loaded)
+        self._load_worker.failed.connect(self._on_async_failed)
+        self._load_worker.start()
+
+    def _on_async_loaded(self, container, stream, dur, fps):
+        self.loading_bar.hide()
+        self.container = container
+        self.video_stream = stream
+        if dur <= 0:
+            info = KeyframeHelper.get_video_info(self.current_file)
+            dur = info.get("duration", 0.0)
+        self.duration_sec = dur
+        self.fps = fps
+
+        self.slider_play.setValue(0)
+        self.range_slider.set_range(0.0, self.duration_sec)
+        self.range_slider.set_values(0.0, self.duration_sec)
+        self._update_range_time_label(0.0, self.duration_sec)
+        self.seek_and_display(0.0)
+
+        if self._on_loaded_callback:
+            cb = self._on_loaded_callback
+            self._on_loaded_callback = None
+            cb()
+
+    def _on_async_failed(self, err_msg: str):
+        self.loading_bar.hide()
+        self.canvas.setText(f"视频加载失败: {err_msg}")
+        self.canvas.setStyleSheet("background-color: #0b0c0e; border-radius: 6px; color: #e06c75; font-size: 13px;")
 
     def load_video(self, file_path: str):
         if not os.path.exists(file_path):
@@ -349,6 +464,10 @@ class VideoPlayerWidget(QWidget):
 
     def close(self):
         self.pause()
+        if self._load_worker and self._load_worker.isRunning():
+            self._load_worker.cancel()
+            self._load_worker.wait()
+            self._load_worker = None
         if self.container:
             try:
                 self.container.close()

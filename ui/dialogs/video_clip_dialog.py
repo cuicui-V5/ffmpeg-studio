@@ -1,10 +1,9 @@
 import os
-import av
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QGroupBox, QMessageBox, QSplitter, QFrame
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from core.tasks.merge_task import MergeItem
 from core.keyframe_helper import KeyframeHelper
@@ -13,7 +12,7 @@ from ui.components.video_player import VideoPlayerWidget
 class VideoClipDialog(QDialog):
     """
     视频合并 - 单视频精准裁剪弹窗
-    界面与处理逻辑对齐“视频裁剪”模块，支持关键帧自动吸附、实时拖拽预览
+    极速秒开架构：弹窗瞬时呈现，视频底层与画面后台异步加载，带有加载动画，不冻结界面
     """
 
     def __init__(self, item: MergeItem, parent=None):
@@ -42,7 +41,7 @@ class VideoClipDialog(QDialog):
         player_layout.addWidget(self.player_widget)
         splitter.addWidget(player_container)
 
-        # 右侧：控制与参数卡片
+        # 右侧：控制与参数卡片 (直接使用已有的 item 元数据，0ms 瞬时渲染)
         control_card = QFrame()
         control_card.setObjectName("dialogControlCard")
         control_card.setStyleSheet("QFrame#dialogControlCard { background-color: #1e2025; border-radius: 6px; }")
@@ -50,7 +49,7 @@ class VideoClipDialog(QDialog):
         control_layout.setContentsMargins(14, 14, 14, 14)
         control_layout.setSpacing(12)
 
-        # 1. 视频属性
+        # 1. 视频属性 (立即呈现)
         self.group_info = QGroupBox("视频属性")
         info_layout = QVBoxLayout(self.group_info)
         size_mb = item.size / (1024 * 1024)
@@ -135,26 +134,38 @@ class VideoClipDialog(QDialog):
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, stretch=1)
 
-        # 加载视频与初始化裁剪范围
-        self._init_video_and_range()
+        # 初始数值快速填充 (阻塞信号，避免构造阶段反复触发繁重逻辑)
+        s_val = self.item.crop_start if self.item.is_cropped else 0.0
+        e_val = self.item.crop_end if self.item.is_cropped else self.item.duration
 
-    def _init_video_and_range(self):
-        file_path_str = str(self.item.filepath)
-        if os.path.exists(file_path_str):
-            self.player_widget.load_video(file_path_str)
-
-        if self.item.is_cropped:
-            s_val = self.item.crop_start
-            e_val = self.item.crop_end
-        else:
-            s_val = 0.0
-            e_val = self.item.duration
+        self.edit_start.blockSignals(True)
+        self.edit_end.blockSignals(True)
+        self.player_widget.range_slider.blockSignals(True)
 
         self.edit_start.setText(KeyframeHelper.format_time(s_val, show_ms=True))
         self.edit_end.setText(KeyframeHelper.format_time(e_val, show_ms=True))
         self.player_widget.range_slider.set_range(0.0, self.item.duration)
         self.player_widget.range_slider.set_values(s_val, e_val)
+
+        self.edit_start.blockSignals(False)
+        self.edit_end.blockSignals(False)
+        self.player_widget.range_slider.blockSignals(False)
+
+        eff_dur = max(0.0, e_val - s_val)
+        self.lbl_snap_result.setText(f"预估区间: {s_val:.2f}s -> {e_val:.2f}s ({eff_dur:.2f}s)")
+
+        # 弹窗秒开：视频与画面通过后台异步线程载入，主线程零阻塞
+        QTimer.singleShot(0, self._start_async_load)
+
+    def _start_async_load(self):
+        file_path_str = str(self.item.filepath)
+        if os.path.exists(file_path_str):
+            self.player_widget.load_video_async(file_path_str, on_loaded=self._on_video_ready)
+
+    def _on_video_ready(self):
         self._update_snap_preview()
+        if self.item.is_cropped and self.item.crop_start > 0:
+            self.player_widget.seek_and_display(self.item.crop_start)
 
     def _on_player_mark_in(self, sec: float):
         self.edit_start.setText(KeyframeHelper.format_time(sec, show_ms=True))
@@ -188,8 +199,12 @@ class VideoClipDialog(QDialog):
 
         if container and stream:
             try:
-                s_snap, s_diff = KeyframeHelper.find_keyframe_instant(container, stream, s_val, mode="floor")
-                e_snap, e_diff = KeyframeHelper.find_keyframe_instant(container, stream, e_val, mode="ceil")
+                s_snap, s_diff = KeyframeHelper.find_keyframe_instant(
+                    container, stream, s_val, mode="floor", duration=self.item.duration
+                )
+                e_snap, e_diff = KeyframeHelper.find_keyframe_instant(
+                    container, stream, e_val, mode="ceil", duration=self.item.duration
+                )
                 eff_dur = max(0.0, e_snap - s_snap)
                 self.lbl_snap_result.setText(
                     f"起点吸附: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s)\n"
@@ -223,14 +238,18 @@ class VideoClipDialog(QDialog):
 
         if container and stream:
             try:
-                s_snap, _ = KeyframeHelper.find_keyframe_instant(container, stream, s_val, mode="floor")
-                e_snap, _ = KeyframeHelper.find_keyframe_instant(container, stream, e_val, mode="ceil")
+                s_snap, _ = KeyframeHelper.find_keyframe_instant(
+                    container, stream, s_val, mode="floor", duration=self.item.duration
+                )
+                e_snap, _ = KeyframeHelper.find_keyframe_instant(
+                    container, stream, e_val, mode="ceil", duration=self.item.duration
+                )
             except Exception:
                 s_snap, e_snap = s_val, e_val
         else:
             s_snap, e_snap = s_val, e_val
 
-        # 判断是否几乎等于全片
+        # 判断是否等于全片
         if s_val <= 0.08 and e_val >= (self.item.duration - 0.08):
             self.item.is_cropped = False
             self.item.crop_start = 0.0
