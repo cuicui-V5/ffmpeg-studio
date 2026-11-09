@@ -184,14 +184,21 @@ class TabCutter(QWidget):
             f"关键帧对齐: 已就绪"
         )
 
-        # 2. 载入视频播放器
-        self.player_widget.load_video(file_path)
-
-        # 3. 初始化时间输入框
+        # 2. 初始化时间输入框 (阻塞信号，避免重复触发计算)
+        self.edit_start.blockSignals(True)
+        self.edit_end.blockSignals(True)
         self.edit_start.setText("00:00:00.00")
         self.edit_end.setText(KeyframeHelper.format_time(self.total_duration, show_ms=True))
+        self.edit_start.blockSignals(False)
+        self.edit_end.blockSignals(False)
 
-        self.keyframes = []
+        eff_dur = self.total_duration
+        self.lbl_snap_result.setText(f"预估区间: 0.00s -> {self.total_duration:.2f}s ({eff_dur:.2f}s)")
+
+        # 3. 后台异步载入视频流与首帧 (附带呼吸加载指示动画，零阻塞)
+        self.player_widget.load_video_async(file_path, on_loaded=self._on_video_loaded)
+
+    def _on_video_loaded(self):
         self._update_snap_preview()
 
     def _on_player_mark_in(self, seconds: float):
@@ -232,13 +239,25 @@ class TabCutter(QWidget):
         stream = getattr(self.player_widget, "video_stream", None)
 
         if container and stream:
-            s_snap, s_diff = KeyframeHelper.find_keyframe_instant(container, stream, s_val, mode="floor")
-            e_snap, e_diff = KeyframeHelper.find_keyframe_instant(container, stream, e_val, mode="ceil")
-            self.lbl_snap_result.setText(
-                f"起点对齐: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s) -> 终点: {KeyframeHelper.format_time(e_snap)}"
-            )
-        else:
-            self.lbl_snap_result.setText(f"预估区间: {s_val:.2f}s -> {e_val:.2f}s")
+            try:
+                s_snap, s_diff = KeyframeHelper.find_keyframe_instant(
+                    container, stream, s_val, mode="floor", duration=self.total_duration
+                )
+                e_snap, e_diff = KeyframeHelper.find_keyframe_instant(
+                    container, stream, e_val, mode="ceil", duration=self.total_duration
+                )
+                eff_dur = max(0.0, e_snap - s_snap)
+                self.lbl_snap_result.setText(
+                    f"起点吸附: {KeyframeHelper.format_time(s_snap)} ({s_diff:+.2f}s)\n"
+                    f"终点吸附: {KeyframeHelper.format_time(e_snap)} ({e_diff:+.2f}s)\n"
+                    f"裁剪后时长: {KeyframeHelper.format_time(eff_dur, show_ms=False)}"
+                )
+                return
+            except Exception:
+                pass
+
+        eff_dur = max(0.0, e_val - s_val)
+        self.lbl_snap_result.setText(f"预估区间: {s_val:.2f}s -> {e_val:.2f}s ({eff_dur:.2f}s)")
 
     def _start_cut(self):
         if not self.current_file or not os.path.exists(self.current_file):
