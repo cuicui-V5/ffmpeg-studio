@@ -1,6 +1,7 @@
 # FFmpeg Studio (FFmpeg 视频工具箱)
 
 <p align="center">
+  <a href="https://cuicui-v5.github.io/ffmpeg-studio/"><img src="https://img.shields.io/badge/Official%20Site-cuicui--v5.github.io%2Fffmpeg--studio-06b6d4?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Official Website" /></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20x64-0078D6?style=for-the-badge&logo=windows" alt="Platform" />
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20%7C%20Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="PySide6" />
@@ -10,8 +11,15 @@
 
 <p align="center">
   <b>专为大疆航拍、运动相机、手机及相机创作者打造的高性能现代化桌面音视频生产力工具箱。</b><br>
-  集批量1080p智能压制、Exif元数据保护、关键帧吸附极速无损裁剪、社交媒体智能分段、预裁剪无损拼接于一体。
+  集批量1080p智能压制、Exif元数据保护、关键帧吸附极速无损裁剪、社交平台智能分段、预裁剪无损拼接于一体。
 </p>
+
+---
+
+## 官方网站与在线文档
+
+* 🌐 **官网入口**：**[https://cuicui-v5.github.io/ffmpeg-studio/](https://cuicui-v5.github.io/ffmpeg-studio/)**
+* 💡 包含完整功能特性演示、交互式界面预览、性能架构深度解析、竞品对比与使用问答。
 
 ---
 
