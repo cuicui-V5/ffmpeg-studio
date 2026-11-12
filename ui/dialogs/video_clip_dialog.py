@@ -32,6 +32,7 @@ class VideoClipDialog(QDialog):
 
         # 左侧：视频播放器与双轨滑块
         player_container = QFrame()
+        player_container.setMinimumWidth(320)
         player_layout = QVBoxLayout(player_container)
         player_layout.setContentsMargins(0, 0, 0, 0)
         self.player_widget = VideoPlayerWidget(self)
@@ -45,6 +46,7 @@ class VideoClipDialog(QDialog):
         control_card = QFrame()
         control_card.setObjectName("dialogControlCard")
         control_card.setStyleSheet("QFrame#dialogControlCard { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; }")
+        control_card.setMinimumWidth(320)
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(14, 14, 14, 14)
         control_layout.setSpacing(12)
@@ -132,6 +134,8 @@ class VideoClipDialog(QDialog):
         splitter.addWidget(control_card)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
         layout.addWidget(splitter, stretch=1)
 
         # 初始数值快速填充 (阻塞信号，避免构造阶段反复触发繁重逻辑)

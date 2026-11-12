@@ -45,6 +45,7 @@ class TabCutter(QWidget):
 
         # 左侧：播放器
         player_container = QFrame()
+        player_container.setMinimumWidth(320)
         player_layout = QVBoxLayout(player_container)
         player_layout.setContentsMargins(0, 0, 0, 0)
         self.player_widget = VideoPlayerWidget()
@@ -61,6 +62,7 @@ class TabCutter(QWidget):
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setMinimumWidth(330)
         scroll_area.setStyleSheet("""
             QScrollArea#cutterScrollArea {
                 background: transparent;
@@ -168,6 +170,8 @@ class TabCutter(QWidget):
         splitter.addWidget(scroll_area)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
         splitter.setSizes([750, 360])
         layout.addWidget(splitter, stretch=1)
 

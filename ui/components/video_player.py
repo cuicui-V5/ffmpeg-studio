@@ -3,47 +3,89 @@ import sys
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QSlider, QLabel, QFrame, QSizePolicy, QProgressBar
+    QSlider, QLabel, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import Qt, Signal, QTimer, QThread, QSize, QRect, QRectF
+from PySide6.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QBrush, QFont
 
 from core.keyframe_helper import KeyframeHelper
 from ui.components.range_slider import RangeSlider
 
-class VideoCanvas(QLabel):
-    """自适应宽高比例的视频画面渲染控件"""
+class VideoCanvas(QWidget):
+    """
+    自适应宽高比例的视频画面渲染控件
+    采用 QPainter 在 paintEvent 中直接自适应缩放绘制，绝不通过 setPixmap 触发递归 LayoutRequest，
+    彻底杜绝因 pixmap 尺寸变化引发的递归缩放、异常放大与挤压右侧控件的假动画问题。
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #94a3b8; font-size: 14px;")
-        self.setText("拖入或选择视频预览")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._current_pixmap = None
+        self._current_pixmap: QPixmap = None
+        self._status_text: str = "拖入或选择视频预览"
+        self._is_loading: bool = False
+
+    def sizeHint(self) -> QSize:
+        return QSize(640, 360)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(240, 140)
 
     def display_pixmap(self, pixmap: QPixmap):
         self._current_pixmap = pixmap
-        self.setText("")
-        self._update_display()
+        self._status_text = ""
+        self._is_loading = False
+        self.update()
 
     def show_loading(self, text: str = "正在载入视频..."):
         self._current_pixmap = None
-        self.setPixmap(QPixmap())
-        self.setText(text)
-        self.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #94a3b8; font-size: 13px;"
-        )
+        self._status_text = text
+        self._is_loading = True
+        self.update()
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._update_display()
+    def setText(self, text: str):
+        self._status_text = text
+        self._current_pixmap = None
+        self._is_loading = False
+        self.update()
 
-    def _update_display(self):
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        rect = self.rect()
+
+        # 1. 绘制暗色视口背景与圆角边框
+        bg_color = QColor("#0f172a")
+        border_color = QColor("#e2e8f0")
+        painter.setPen(QPen(border_color, 1))
+        painter.setBrush(QBrush(bg_color))
+        painter.drawRoundedRect(QRectF(0.5, 0.5, w - 1.0, h - 1.0), 8, 8)
+
+        # 2. 若存在视频帧，计算保持纵横比的居中目标矩形并绘制
         if self._current_pixmap and not self._current_pixmap.isNull():
-            scaled = self._current_pixmap.scaled(
-                self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.setPixmap(scaled)
+            pw = self._current_pixmap.width()
+            ph = self._current_pixmap.height()
+            if pw > 0 and ph > 0:
+                inner_w = max(1, w - 4)
+                inner_h = max(1, h - 4)
+                scale = min(inner_w / pw, inner_h / ph)
+                dw = int(pw * scale)
+                dh = int(ph * scale)
+                dx = int((w - dw) / 2)
+                dy = int((h - dh) / 2)
+                dest_rect = QRect(dx, dy, dw, dh)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+                painter.drawPixmap(dest_rect, self._current_pixmap)
+        elif self._status_text:
+            # 3. 绘制提示文本
+            painter.setPen(QColor("#38bdf8" if self._is_loading else "#94a3b8"))
+            font = QFont("Microsoft YaHei", 10)
+            if self._is_loading:
+                font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(rect, Qt.AlignCenter, self._status_text)
 
 class VideoLoadWorker(QThread):
     """后台视频异步加载线程，避免打开大型文件时阻塞主 UI"""
