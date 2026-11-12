@@ -146,6 +146,7 @@ class VideoClipDialog(QDialog):
         self.edit_end.setText(KeyframeHelper.format_time(e_val, show_ms=True))
         self.player_widget.range_slider.set_range(0.0, self.item.duration)
         self.player_widget.range_slider.set_values(s_val, e_val)
+        self.player_widget._update_range_time_label(s_val, e_val)
 
         self.edit_start.blockSignals(False)
         self.edit_end.blockSignals(False)
@@ -160,22 +161,46 @@ class VideoClipDialog(QDialog):
     def _start_async_load(self):
         file_path_str = str(self.item.filepath)
         if os.path.exists(file_path_str):
-            self.player_widget.load_video_async(file_path_str, on_loaded=self._on_video_ready)
+            init_range = (self.item.crop_start, self.item.crop_end) if self.item.is_cropped else None
+            self.player_widget.load_video_async(
+                file_path_str,
+                on_loaded=self._on_video_ready,
+                initial_range=init_range
+            )
 
     def _on_video_ready(self):
+        s_val = self.item.crop_start if self.item.is_cropped else 0.0
+        e_val = self.item.crop_end if self.item.is_cropped else (self.player_widget.duration_sec or self.item.duration)
+
+        # 确保播放器滑块、区间标签、时间输入框及预览全部保持已确定的裁剪区间
+        self.player_widget.range_slider.blockSignals(True)
+        self.player_widget.set_range_values(s_val, e_val)
+        self.player_widget.range_slider.blockSignals(False)
+
+        self.edit_start.blockSignals(True)
+        self.edit_end.blockSignals(True)
+        self.edit_start.setText(KeyframeHelper.format_time(s_val, show_ms=True))
+        self.edit_end.setText(KeyframeHelper.format_time(e_val, show_ms=True))
+        self.edit_start.blockSignals(False)
+        self.edit_end.blockSignals(False)
+
         self._update_snap_preview()
-        if self.item.is_cropped and self.item.crop_start > 0:
-            self.player_widget.seek_and_display(self.item.crop_start)
+
+        # 无论何处裁剪，均自动定位到裁剪区间起始帧
+        if self.item.is_cropped:
+            self.player_widget.seek_and_display(s_val)
 
     def _on_player_mark_in(self, sec: float):
         self.edit_start.setText(KeyframeHelper.format_time(sec, show_ms=True))
         e_sec = KeyframeHelper.parse_time(self.edit_end.text()) or self.item.duration
-        self.player_widget.range_slider.set_values(sec, max(sec, e_sec))
+        self.player_widget.set_range_values(sec, max(sec, e_sec))
+        self._update_snap_preview()
 
     def _on_player_mark_out(self, sec: float):
         self.edit_end.setText(KeyframeHelper.format_time(sec, show_ms=True))
         s_sec = KeyframeHelper.parse_time(self.edit_start.text()) or 0.0
-        self.player_widget.range_slider.set_values(min(sec, s_sec), sec)
+        self.player_widget.set_range_values(min(sec, s_sec), sec)
+        self._update_snap_preview()
 
     def _on_player_range_changed(self, in_sec: float, out_sec: float):
         self.edit_start.blockSignals(True)

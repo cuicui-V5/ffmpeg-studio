@@ -99,6 +99,7 @@ class VideoPlayerWidget(QWidget):
         self._is_scrubbing = False
         self._load_worker = None
         self._on_loaded_callback = None
+        self._initial_range = None
 
         # 播放定时器
         self.play_timer = QTimer(self)
@@ -229,7 +230,7 @@ class VideoPlayerWidget(QWidget):
         control_layout.addLayout(btn_bar)
         layout.addWidget(control_card)
 
-    def load_video_async(self, file_path: str, on_loaded=None):
+    def load_video_async(self, file_path: str, on_loaded=None, initial_range: tuple[float, float] = None):
         """后台异步加载视频，主 UI 保持响应不卡死，并带有加载动画指示"""
         if not os.path.exists(file_path):
             self.canvas.setText("未找到视频文件")
@@ -249,6 +250,7 @@ class VideoPlayerWidget(QWidget):
             self.container = None
 
         self.current_file = file_path
+        self._initial_range = initial_range
         self.canvas.show_loading("正在载入视频画面与时间轴...")
         self.loading_bar.show()
 
@@ -268,11 +270,19 @@ class VideoPlayerWidget(QWidget):
         self.duration_sec = dur
         self.fps = fps
 
-        self.slider_play.setValue(0)
         self.range_slider.set_range(0.0, self.duration_sec)
-        self.range_slider.set_values(0.0, self.duration_sec)
-        self._update_range_time_label(0.0, self.duration_sec)
-        self.seek_and_display(0.0)
+        if self._initial_range:
+            init_s, init_e = self._initial_range
+            init_s = max(0.0, min(self.duration_sec, init_s))
+            init_e = max(init_s, min(self.duration_sec, init_e))
+            self.range_slider.set_values(init_s, init_e)
+            self._update_range_time_label(init_s, init_e)
+            self.seek_and_display(init_s)
+        else:
+            self.slider_play.setValue(0)
+            self.range_slider.set_values(0.0, self.duration_sec)
+            self._update_range_time_label(0.0, self.duration_sec)
+            self.seek_and_display(0.0)
 
         if self._on_loaded_callback:
             cb = self._on_loaded_callback
@@ -284,7 +294,7 @@ class VideoPlayerWidget(QWidget):
         self.canvas.setText(f"视频加载失败: {err_msg}")
         self.canvas.setStyleSheet("background-color: #0b0c0e; border-radius: 6px; color: #e06c75; font-size: 13px;")
 
-    def load_video(self, file_path: str):
+    def load_video(self, file_path: str, initial_range: tuple[float, float] = None):
         if not os.path.exists(file_path):
             return
 
@@ -297,6 +307,7 @@ class VideoPlayerWidget(QWidget):
             self.container = None
 
         self.current_file = file_path
+        self._initial_range = initial_range
         try:
             import av
             self.container = av.open(file_path)
@@ -314,13 +325,22 @@ class VideoPlayerWidget(QWidget):
             self.fps = float(r_fps) if r_fps and float(r_fps) > 0 else 30.0
 
             # 重设滑块
-            self.slider_play.setValue(0)
             self.range_slider.set_range(0.0, self.duration_sec)
-            self.range_slider.set_values(0.0, self.duration_sec)
-            self._update_range_time_label(0.0, self.duration_sec)
+            if initial_range:
+                init_s, init_e = initial_range
+                init_s = max(0.0, min(self.duration_sec, init_s))
+                init_e = max(init_s, min(self.duration_sec, init_e))
+                self.range_slider.set_values(init_s, init_e)
+                self._update_range_time_label(init_s, init_e)
+                self.seek_and_display(init_s)
+            else:
+                self.slider_play.setValue(0)
+                self.range_slider.set_values(0.0, self.duration_sec)
+                self._update_range_time_label(0.0, self.duration_sec)
+                self.seek_and_display(0.0)
 
             # 载入并显示第 0 帧
-            self.seek_and_display(0.0)
+            self.seek_and_display(0.0 if not initial_range else initial_range[0])
 
         except Exception as e:
             self.canvas.setText(f"视频加载失败: {e}")

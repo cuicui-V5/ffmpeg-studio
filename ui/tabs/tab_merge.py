@@ -147,9 +147,11 @@ class TabMerge(QWidget):
         self.table.setColumnWidth(10, 85)
 
         # 连接拖拽排序与拖入事件
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.row_moved.connect(self._on_row_reordered)
         self.table.files_dropped.connect(self._handle_dropped_paths)
         self.table.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
 
@@ -387,6 +389,10 @@ class TabMerge(QWidget):
         self.edit_output.clear()
         self._user_custom_output = False
         self._refresh_ui()
+
+    def _on_cell_double_clicked(self, row: int, column: int):
+        if 0 <= row < len(self.items):
+            self._open_clip_dialog(self.items[row])
 
     def _on_item_double_clicked(self, item_widget: QTableWidgetItem):
         row = item_widget.row()
