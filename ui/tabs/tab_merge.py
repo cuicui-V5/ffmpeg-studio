@@ -150,7 +150,6 @@ class TabMerge(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.row_moved.connect(self._on_row_reordered)
         self.table.files_dropped.connect(self._handle_dropped_paths)
-        self.table.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
@@ -391,18 +390,20 @@ class TabMerge(QWidget):
         self._refresh_ui()
 
     def _on_cell_double_clicked(self, row: int, column: int):
-        if 0 <= row < len(self.items):
-            self._open_clip_dialog(self.items[row])
-
-    def _on_item_double_clicked(self, item_widget: QTableWidgetItem):
-        row = item_widget.row()
-        if 0 <= row < len(self.items):
+        # 忽略操作按钮列的双击，避免与按钮本身的点击逻辑重叠
+        if column != 10 and 0 <= row < len(self.items):
             self._open_clip_dialog(self.items[row])
 
     def _open_clip_dialog(self, item: MergeItem):
-        dlg = VideoClipDialog(item, parent=self)
-        if dlg.exec():
-            self._refresh_ui()
+        if getattr(self, "_dialog_active", False):
+            return
+        self._dialog_active = True
+        try:
+            dlg = VideoClipDialog(item, parent=self)
+            if dlg.exec():
+                self._refresh_ui()
+        finally:
+            self._dialog_active = False
 
     def _on_table_context_menu(self, pos: QPoint):
         item = self.table.itemAt(pos)
