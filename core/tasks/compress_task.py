@@ -7,6 +7,7 @@ from PySide6.QtCore import QThread, Signal
 from core.tool_manager import tool_mgr
 from core.hardware import HardwareDetector
 from core.keyframe_helper import KeyframeHelper
+from core.bgm_helper import BgmConfig, BgmHelper
 
 EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.m4v', '.3gp', '.flv', '.ts', '.webm'}
 
@@ -115,11 +116,12 @@ class BatchCompressWorker(QThread):
     log_emitted = Signal(str)
     all_finished = Signal()
 
-    def __init__(self, items: list[CompressItem], encoder: str = "auto", cq: int = 28):
+    def __init__(self, items: list[CompressItem], encoder: str = "auto", cq: int = 28, bgm_config: BgmConfig | None = None):
         super().__init__()
         self.items = items
         self.encoder = encoder
         self.cq = cq
+        self.bgm_config = bgm_config or BgmConfig()
         self._is_cancelled = False
         self._current_proc = None
 
@@ -164,24 +166,51 @@ class BatchCompressWorker(QThread):
             
             cmd_ffmpeg = [tool_ffmpeg, '-y', '-hide_banner']
 
-            # 硬件加速参数
-            if chosen_encoder == "hevc_nvenc":
-                cmd_ffmpeg.extend(['-hwaccel', 'cuda', '-i', str(item.filepath)])
-                cmd_ffmpeg.extend(['-vf', scale_filter, '-c:v', 'hevc_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', str(self.cq), '-b:v', '0'])
-            elif chosen_encoder == "h264_nvenc":
-                cmd_ffmpeg.extend(['-hwaccel', 'cuda', '-i', str(item.filepath)])
-                cmd_ffmpeg.extend(['-vf', scale_filter, '-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', str(self.cq), '-b:v', '0'])
+            # 硬件加速参数与视频输入
+            video_input_args = []
+            if chosen_encoder in ("hevc_nvenc", "h264_nvenc"):
+                video_input_args.extend(['-hwaccel', 'cuda', '-i', str(item.filepath)])
             elif chosen_encoder == "hevc_qsv":
-                cmd_ffmpeg.extend(['-hwaccel', 'qsv', '-i', str(item.filepath)])
-                cmd_ffmpeg.extend(['-vf', scale_filter, '-c:v', 'hevc_qsv', '-global_quality', str(self.cq)])
-            elif chosen_encoder == "libx265":
-                cmd_ffmpeg.extend(['-i', str(item.filepath)])
-                cmd_ffmpeg.extend(['-vf', scale_filter, '-c:v', 'libx265', '-crf', str(self.cq), '-preset', 'medium'])
-            else: # libx264
-                cmd_ffmpeg.extend(['-i', str(item.filepath)])
-                cmd_ffmpeg.extend(['-vf', scale_filter, '-c:v', 'libx264', '-crf', str(self.cq), '-preset', 'medium'])
+                video_input_args.extend(['-hwaccel', 'qsv', '-i', str(item.filepath)])
+            else:
+                video_input_args.extend(['-i', str(item.filepath)])
 
-            cmd_ffmpeg.extend(['-c:a', 'aac', '-b:a', '128k', str(item.output_path)])
+            cmd_ffmpeg.extend(video_input_args)
+
+            # 视频编码参数
+            video_enc_args = []
+            if chosen_encoder == "hevc_nvenc":
+                video_enc_args.extend(['-vf', scale_filter, '-c:v', 'hevc_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', str(self.cq), '-b:v', '0'])
+            elif chosen_encoder == "h264_nvenc":
+                video_enc_args.extend(['-vf', scale_filter, '-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', str(self.cq), '-b:v', '0'])
+            elif chosen_encoder == "hevc_qsv":
+                video_enc_args.extend(['-vf', scale_filter, '-c:v', 'hevc_qsv', '-global_quality', str(self.cq)])
+            elif chosen_encoder == "libx265":
+                video_enc_args.extend(['-vf', scale_filter, '-c:v', 'libx265', '-crf', str(self.cq), '-preset', 'medium'])
+            else: # libx264
+                video_enc_args.extend(['-vf', scale_filter, '-c:v', 'libx264', '-crf', str(self.cq), '-preset', 'medium'])
+
+            # 音频与背景音乐处理
+            if self.bgm_config.is_active():
+                info = KeyframeHelper.get_video_info(str(item.filepath))
+                has_orig_audio = (info.get("audio_codec", "none") != "none")
+                extra_inputs, filter_complex_str, audio_map_args, extra_output_args = BgmHelper.build_bgm_args(
+                    self.bgm_config,
+                    has_orig_audio=has_orig_audio,
+                    video_input_idx=0,
+                    target_duration=item.duration,
+                    start_bgm_input_idx=1
+                )
+                cmd_ffmpeg.extend(extra_inputs)
+                cmd_ffmpeg.extend(video_enc_args)
+                cmd_ffmpeg.extend(['-filter_complex', filter_complex_str])
+                cmd_ffmpeg.extend(['-map', '0:v'])
+                cmd_ffmpeg.extend(audio_map_args)
+                cmd_ffmpeg.extend(extra_output_args)
+                cmd_ffmpeg.append(str(item.output_path))
+            else:
+                cmd_ffmpeg.extend(video_enc_args)
+                cmd_ffmpeg.extend(['-c:a', 'aac', '-b:a', '128k', str(item.output_path)])
 
             # 异步执行并解析进度
             out_time_pattern = re.compile(r'time=(\d{2}):(\d{2}):(\d{2}\.\d+)')

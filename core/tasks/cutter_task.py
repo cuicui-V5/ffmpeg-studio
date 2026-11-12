@@ -5,11 +5,13 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from core.tool_manager import tool_mgr
 from core.keyframe_helper import KeyframeHelper
+from core.bgm_helper import BgmConfig, BgmHelper
 
 class CutterWorker(QThread):
     """
     极速视频裁切线程
     支持关键帧智能吸附对齐（杜绝黑屏/花屏，无需慢速重编码）
+    支持添加背景音乐（视频流保持 copy 极速无损，仅对音频流重编码）
     """
     finished = Signal(bool, str, str)  # (success, message, output_path)
     log_emitted = Signal(str)
@@ -20,7 +22,8 @@ class CutterWorker(QThread):
         start_sec: float,
         end_sec: float,
         auto_snap: bool = True,
-        output_dir: str = ""
+        output_dir: str = "",
+        bgm_config: BgmConfig | None = None
     ):
         super().__init__()
         self.file_path = Path(file_path).resolve()
@@ -28,6 +31,7 @@ class CutterWorker(QThread):
         self.raw_end = end_sec
         self.auto_snap = auto_snap
         self.output_dir = Path(output_dir) if output_dir else self.file_path.parent / "output_cut"
+        self.bgm_config = bgm_config or BgmConfig()
         
         self.snapped_start = self.raw_start
         self.snapped_end = self.raw_end
@@ -75,17 +79,42 @@ class CutterWorker(QThread):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_path = self.output_dir / f"{self.file_path.stem}_cut{self.file_path.suffix}"
 
-        # 4. 构建 FFmpeg 命令进行极速无损流复制
-        cmd = [
-            tool_ffmpeg, '-y', '-hide_banner',
-            '-ss', str(self.snapped_start),
-            '-to', str(self.snapped_end),
-            '-i', str(self.file_path),
-            '-c', 'copy',
-            str(self.output_path)
-        ]
-
-        self.log_emitted.emit("开始流复制裁剪...")
+        # 4. 构建 FFmpeg 命令进行极速无损流复制（若开启BGM，视频流保持copy，音频流重编码混音）
+        eff_dur = max(0.001, self.snapped_end - self.snapped_start)
+        if self.bgm_config.is_active():
+            info = KeyframeHelper.get_video_info(str(self.file_path))
+            has_orig_audio = (info.get("audio_codec", "none") != "none")
+            extra_inputs, filter_complex_str, audio_map_args, extra_output_args = BgmHelper.build_bgm_args(
+                self.bgm_config,
+                has_orig_audio=has_orig_audio,
+                video_input_idx=0,
+                target_duration=eff_dur,
+                start_bgm_input_idx=1
+            )
+            cmd = [
+                tool_ffmpeg, '-y', '-hide_banner',
+                '-ss', str(self.snapped_start),
+                '-to', str(self.snapped_end),
+                '-i', str(self.file_path),
+                *extra_inputs,
+                '-filter_complex', filter_complex_str,
+                '-map', '0:v',
+                *audio_map_args,
+                '-c:v', 'copy',
+                *extra_output_args,
+                str(self.output_path)
+            ]
+            self.log_emitted.emit("开始视频裁剪（视频流无损复制，背景音乐混音）...")
+        else:
+            cmd = [
+                tool_ffmpeg, '-y', '-hide_banner',
+                '-ss', str(self.snapped_start),
+                '-to', str(self.snapped_end),
+                '-i', str(self.file_path),
+                '-c', 'copy',
+                str(self.output_path)
+            ]
+            self.log_emitted.emit("开始极速流复制裁剪...")
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         try:
             self._proc = subprocess.Popen(

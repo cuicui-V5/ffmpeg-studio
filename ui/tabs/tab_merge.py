@@ -15,6 +15,7 @@ from core.tasks.merge_task import (
 )
 from core.keyframe_helper import KeyframeHelper
 from ui.dialogs.video_clip_dialog import VideoClipDialog
+from ui.components.bgm_widget import BgmWidget
 
 class ReorderableTableWidget(QTableWidget):
     """支持鼠标拖拽行实时调整排序及外部视频文件拖入的增强表格控件"""
@@ -155,6 +156,9 @@ class TabMerge(QWidget):
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
 
         layout.addWidget(self.table, stretch=1)
+
+        self.bgm_widget = BgmWidget()
+        layout.addWidget(self.bgm_widget)
 
         # 4. 底部执行控制面板
         bottom_box = QGroupBox("执行操作")
@@ -649,7 +653,8 @@ class TabMerge(QWidget):
         self.prog_bar.setValue(0)
         self.lbl_exec_status.setText("正在执行处理...")
 
-        self.worker = MergeWorker(self.items, out_path, parent=self)
+        bgm_config = self.bgm_widget.get_config()
+        self.worker = MergeWorker(self.items, out_path, bgm_config=bgm_config, parent=self)
         self.worker.progress_changed.connect(self._on_worker_progress)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.start()

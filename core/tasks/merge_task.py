@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QThread, Signal
 
 from core.tool_manager import tool_mgr
+from core.bgm_helper import BgmConfig, BgmHelper
 
 EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.flv', '.m4v', '.ts', '.webm'}
 
@@ -131,7 +132,7 @@ class MergeWorker(QThread):
     log_emitted = Signal(str)
     finished = Signal(bool, str, str)           # (success, message, output_path)
 
-    def __init__(self, items, output_path: Path, total_duration: float = 0.0, parent=None):
+    def __init__(self, items, output_path: Path, total_duration: float = 0.0, bgm_config: BgmConfig | None = None, parent=None):
         super().__init__(parent)
         # 兼容 list[MergeItem] 或 list[Path]
         if items and isinstance(items[0], Path):
@@ -141,6 +142,7 @@ class MergeWorker(QThread):
 
         self.output_path = Path(output_path)
         self.total_duration = total_duration if total_duration > 0 else sum(it.effective_duration for it in self.items)
+        self.bgm_config = bgm_config or BgmConfig()
         self._proc = None
         self._is_cancelled = False
         self._list_file = None
@@ -264,16 +266,38 @@ class MergeWorker(QThread):
             self.finished.emit(False, f"创建合并列表文件失败: {e}", "")
             return
 
-        # 3. 构建 FFmpeg 极速流复制无损合并命令
-        cmd = [
-            tool_ffmpeg, '-y', '-hide_banner',
-            '-f', 'concat', '-safe', '0',
-            '-i', str(self._list_file),
-            '-c', 'copy',
-            str(self.output_path)
-        ]
-
+        # 3. 构建 FFmpeg 极速流复制无损合并命令（若启用BGM，视频流copy，音频流混音重编码）
         total_effective_duration = sum(item.effective_duration for item in self.items)
+        if self.bgm_config.is_active():
+            has_orig_audio = any(it.audio_codec != "none" for it in self.items)
+            extra_inputs, filter_complex_str, audio_map_args, extra_output_args = BgmHelper.build_bgm_args(
+                self.bgm_config,
+                has_orig_audio=has_orig_audio,
+                video_input_idx=0,
+                target_duration=total_effective_duration,
+                start_bgm_input_idx=1
+            )
+            cmd = [
+                tool_ffmpeg, '-y', '-hide_banner',
+                '-f', 'concat', '-safe', '0',
+                '-i', str(self._list_file),
+                *extra_inputs,
+                '-filter_complex', filter_complex_str,
+                '-map', '0:v',
+                *audio_map_args,
+                '-c:v', 'copy',
+                *extra_output_args,
+                str(self.output_path)
+            ]
+        else:
+            cmd = [
+                tool_ffmpeg, '-y', '-hide_banner',
+                '-f', 'concat', '-safe', '0',
+                '-i', str(self._list_file),
+                '-c', 'copy',
+                str(self.output_path)
+            ]
+
         self.log_emitted.emit(f"开始无损合并: {len(self.items)} 个视频片段")
         self.log_emitted.emit(f"[EXEC] {' '.join(cmd)}\n")
 

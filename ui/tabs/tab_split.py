@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor
 from core.tasks.split_task import PRESETS, SplitPlan, BatchSplitWorker
 from core.keyframe_helper import KeyframeHelper
 from core.tasks.compress_task import EXTENSIONS
+from ui.components.bgm_widget import BgmWidget
 
 class TabSplit(QWidget):
     """视频分段"""
@@ -143,6 +144,9 @@ class TabSplit(QWidget):
         bottom_layout.addWidget(self.btn_start)
         bottom_box_layout.addLayout(bottom_layout)
 
+        self.bgm_widget = BgmWidget()
+        layout.addWidget(self.bgm_widget)
+
         layout.addWidget(bottom_box)
 
     def dragEnterEvent(self, event):
@@ -251,7 +255,8 @@ class TabSplit(QWidget):
         self.btn_start.setEnabled(False)
         self.btn_cancel.setEnabled(True)
 
-        self.worker = BatchSplitWorker(self.files, max_bytes, max_sec)
+        bgm_config = self.bgm_widget.get_config()
+        self.worker = BatchSplitWorker(self.files, max_bytes, max_sec, bgm_config=bgm_config)
         self.worker.item_updated.connect(self._on_item_updated)
         self.worker.file_progress.connect(self._on_file_progress)
         self.worker.overall_progress.connect(self._on_overall_progress)

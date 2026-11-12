@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt
 from core.tasks.cutter_task import CutterWorker
 from core.keyframe_helper import KeyframeHelper
 from ui.components.video_player import VideoPlayerWidget
+from ui.components.bgm_widget import BgmWidget
 
 class TabCutter(QWidget):
     """视频裁剪"""
@@ -106,6 +107,10 @@ class TabCutter(QWidget):
         time_layout.addWidget(self.lbl_snap_result)
 
         control_layout.addWidget(group_time)
+
+        # 背景音乐配置
+        self.bgm_widget = BgmWidget()
+        control_layout.addWidget(self.bgm_widget)
         control_layout.addStretch()
 
         # 导出操作与独立单文件进度
@@ -284,7 +289,8 @@ class TabCutter(QWidget):
             start_sec=s_val,
             end_sec=e_val,
             auto_snap=True,
-            output_dir=str(out_dir)
+            output_dir=str(out_dir),
+            bgm_config=self.bgm_widget.get_config()
         )
         self.worker.finished.connect(self._on_cut_finished)
         self.worker.start()

@@ -145,5 +145,11 @@ def test_system():
 
     print("\n🎉 全部单元测试通过！核心功能与算法验证 100% 成功！")
 
+    # 执行 BGM 功能测试
+    import test_bgm_feature
+    test_bgm_feature.main()
+
 if __name__ == "__main__":
     test_system()
+    import test_bgm_feature
+    test_bgm_feature.main()

@@ -15,6 +15,7 @@ from core.tasks.compress_task import (
 )
 from core.hardware import HardwareDetector
 from core.keyframe_helper import KeyframeHelper
+from ui.components.bgm_widget import BgmWidget
 
 class TabCompress(QWidget):
     """批量压制"""
@@ -158,6 +159,9 @@ class TabCompress(QWidget):
         action_layout.addWidget(self.btn_cancel)
         action_layout.addWidget(self.btn_start)
         bottom_layout.addLayout(action_layout)
+
+        self.bgm_widget = BgmWidget()
+        layout.addWidget(self.bgm_widget)
 
         layout.addWidget(bottom_box)
 
@@ -383,7 +387,8 @@ class TabCompress(QWidget):
         self.btn_cancel.setEnabled(True)
         self.lbl_status_desc.setText("正在执行批量压制任务...")
 
-        self.worker = BatchCompressWorker(self.items, encoder=encoder_key, cq=cq_val)
+        bgm_config = self.bgm_widget.get_config()
+        self.worker = BatchCompressWorker(self.items, encoder=encoder_key, cq=cq_val, bgm_config=bgm_config)
         self.worker.item_updated.connect(self._on_item_updated)
         self.worker.file_progress.connect(self._on_file_progress)
         self.worker.overall_progress.connect(self._on_overall_progress)
