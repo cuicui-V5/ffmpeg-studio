@@ -34,7 +34,7 @@ class TabCutter(QWidget):
         self.btn_select_file = QPushButton("选择视频")
         self.btn_select_file.clicked.connect(self._choose_video_file)
         self.lbl_file_path = QLabel("未载入视频")
-        self.lbl_file_path.setStyleSheet("color: #8a919e; font-style: italic;")
+        self.lbl_file_path.setStyleSheet("color: #64748b; font-style: italic;")
 
         top_bar.addWidget(self.btn_select_file)
         top_bar.addWidget(self.lbl_file_path, stretch=1)
@@ -57,7 +57,7 @@ class TabCutter(QWidget):
         # 右侧：裁切参数与控制
         control_card = QFrame()
         control_card.setObjectName("cutterControlCard")
-        control_card.setStyleSheet("QFrame#cutterControlCard { background-color: #1e2025; border-radius: 6px; }")
+        control_card.setStyleSheet("QFrame#cutterControlCard { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; }")
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(14, 14, 14, 14)
         control_layout.setSpacing(12)
@@ -103,12 +103,12 @@ class TabCutter(QWidget):
 
         # 关键帧对齐状态指示
         self.lbl_snap_result = QLabel("关键帧自动对齐已就绪")
-        self.lbl_snap_result.setStyleSheet("color: #00d2ff; font-weight: bold; font-family: Consolas; font-size: 12px;")
+        self.lbl_snap_result.setStyleSheet("color: #2563eb; font-weight: 600; font-family: Consolas, monospace; font-size: 12px;")
         time_layout.addWidget(self.lbl_snap_result)
 
         control_layout.addWidget(group_time)
 
-        # 背景音乐配置
+        # 背景音乐配置 (折叠式)
         self.bgm_widget = BgmWidget()
         control_layout.addWidget(self.bgm_widget)
         control_layout.addStretch()
@@ -119,7 +119,7 @@ class TabCutter(QWidget):
         action_layout.setSpacing(8)
 
         self.lbl_cut_status = QLabel("就绪")
-        self.lbl_cut_status.setStyleSheet("color: #abb2bf; font-size: 12px;")
+        self.lbl_cut_status.setStyleSheet("color: #64748b; font-size: 12px;")
 
         self.prog_cut = QProgressBar()
         self.prog_cut.setValue(0)
@@ -171,7 +171,7 @@ class TabCutter(QWidget):
 
         self.current_file = file_path
         self.lbl_file_path.setText(file_path)
-        self.lbl_file_path.setStyleSheet("color: #00d2ff; font-weight: bold;")
+        self.lbl_file_path.setStyleSheet("color: #2563eb; font-weight: 600;")
 
         # 1. 毫秒级提取基础视频媒体属性
         meta = KeyframeHelper.get_video_info(file_path)

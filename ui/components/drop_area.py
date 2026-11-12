@@ -19,51 +19,43 @@ class DropArea(QFrame):
         layout.setContentsMargins(20, 24, 20, 24)
 
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #00d2ff;")
+        self.title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #2563eb;")
         self.title_label.setAlignment(Qt.AlignCenter)
 
         self.sub_label = QLabel(subtitle)
-        self.sub_label.setStyleSheet("font-size: 12px; color: #8a919e;")
+        self.sub_label.setStyleSheet("font-size: 12px; color: #64748b;")
         self.sub_label.setAlignment(Qt.AlignCenter)
 
         layout.addWidget(self.title_label)
         layout.addWidget(self.sub_label)
 
-        self.setStyleSheet("""
+        self._style_normal = """
             QFrame#dropArea {
-                border: 2px dashed #3e4451;
+                border: 2px dashed #cbd5e1;
                 border-radius: 8px;
-                background-color: #1a1b1f;
+                background-color: #f8fafc;
             }
             QFrame#dropArea:hover {
-                border-color: #00d2ff;
-                background-color: #20232a;
+                border-color: #3b82f6;
+                background-color: #eff6ff;
             }
-        """)
+        """
+        self._style_active = """
+            QFrame#dropArea {
+                border: 2px dashed #2563eb;
+                border-radius: 8px;
+                background-color: #dbeafe;
+            }
+        """
+        self.setStyleSheet(self._style_normal)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
-            self.setStyleSheet("""
-                QFrame#dropArea {
-                    border: 2px dashed #00d2ff;
-                    border-radius: 8px;
-                    background-color: #242b35;
-                }
-            """)
+            self.setStyleSheet(self._style_active)
 
     def dragLeaveEvent(self, event):
-        self.setStyleSheet("""
-            QFrame#dropArea {
-                border: 2px dashed #3e4451;
-                border-radius: 8px;
-                background-color: #1a1b1f;
-            }
-            QFrame#dropArea:hover {
-                border-color: #00d2ff;
-                background-color: #20232a;
-            }
-        """)
+        self.setStyleSheet(self._style_normal)
 
     def dropEvent(self, event: QDropEvent):
         urls = event.mimeData().urls()

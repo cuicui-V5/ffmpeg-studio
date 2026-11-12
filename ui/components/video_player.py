@@ -16,7 +16,7 @@ class VideoCanvas(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("background-color: #0b0c0e; border-radius: 6px; color: #5c6370; font-size: 14px;")
+        self.setStyleSheet("background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #94a3b8; font-size: 14px;")
         self.setText("拖入或选择视频预览")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._current_pixmap = None
@@ -31,7 +31,7 @@ class VideoCanvas(QLabel):
         self.setPixmap(QPixmap())
         self.setText(text)
         self.setStyleSheet(
-            "background-color: #0b0c0e; border-radius: 6px; color: #00d2ff; font-size: 14px; font-weight: bold;"
+            "background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #38bdf8; font-size: 14px; font-weight: bold;"
         )
 
     def resizeEvent(self, event):
@@ -128,12 +128,12 @@ class VideoPlayerWidget(QWidget):
         self.loading_bar.setRange(0, 0)
         self.loading_bar.setStyleSheet("""
             QProgressBar {
-                background-color: #1e2025;
+                background-color: #e2e8f0;
                 border: none;
                 border-radius: 1px;
             }
             QProgressBar::chunk {
-                background-color: #00d2ff;
+                background-color: #2563eb;
                 border-radius: 1px;
             }
         """)
@@ -142,7 +142,7 @@ class VideoPlayerWidget(QWidget):
 
         # 2. 控制面板卡片
         control_card = QFrame()
-        control_card.setStyleSheet("QFrame#playerControlCard { background-color: #21252b; border-radius: 6px; }")
+        control_card.setStyleSheet("QFrame#playerControlCard { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; }")
         control_card.setObjectName("playerControlCard")
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(10, 8, 10, 8)
@@ -156,7 +156,7 @@ class VideoPlayerWidget(QWidget):
         lbl_play = QLabel("播放位置:")
         lbl_play.setFixedWidth(65)
         lbl_play.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        lbl_play.setStyleSheet("color: #abb2bf; font-weight: bold; font-size: 12px;")
+        lbl_play.setStyleSheet("color: #475569; font-weight: bold; font-size: 12px;")
 
         self.slider_play = QSlider(Qt.Horizontal)
         self.slider_play.setRange(0, 1000)
@@ -166,7 +166,7 @@ class VideoPlayerWidget(QWidget):
 
         self.time_label = QLabel("00:00:00 / 00:00:00")
         self.time_label.setFixedWidth(145)
-        self.time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #abb2bf;")
+        self.time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #0f172a;")
 
         time_bar.addWidget(lbl_play)
         time_bar.addWidget(self.slider_play, stretch=1)
@@ -181,7 +181,7 @@ class VideoPlayerWidget(QWidget):
         lbl_range_title = QLabel("裁切区间:")
         lbl_range_title.setFixedWidth(65)
         lbl_range_title.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        lbl_range_title.setStyleSheet("color: #00d2ff; font-weight: bold; font-size: 12px;")
+        lbl_range_title.setStyleSheet("color: #2563eb; font-weight: bold; font-size: 12px;")
 
         self.range_slider = RangeSlider()
         self.range_slider.range_changed.connect(self._on_range_slider_changed)
@@ -189,7 +189,7 @@ class VideoPlayerWidget(QWidget):
 
         self.range_time_label = QLabel("00:00:00 -> 00:00:00")
         self.range_time_label.setFixedWidth(145)
-        self.range_time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #00d2ff;")
+        self.range_time_label.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; color: #2563eb; font-weight: 500;")
 
         range_bar.addWidget(lbl_range_title)
         range_bar.addWidget(self.range_slider, stretch=1)
@@ -213,11 +213,11 @@ class VideoPlayerWidget(QWidget):
         self.btn_step_forward.clicked.connect(lambda: self.seek_relative(1.0))
 
         self.btn_mark_in = QPushButton("设置起点")
-        self.btn_mark_in.setStyleSheet("background-color: #2c3e50; border: 1px solid #00d2ff; color: #00d2ff; font-weight: bold;")
+        self.btn_mark_in.setStyleSheet("background-color: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: bold; border-radius: 4px; padding: 4px 10px;")
         self.btn_mark_in.clicked.connect(self._trigger_mark_in)
 
         self.btn_mark_out = QPushButton("设置终点")
-        self.btn_mark_out.setStyleSheet("background-color: #3b2a30; border: 1px solid #e06c75; color: #e06c75; font-weight: bold;")
+        self.btn_mark_out.setStyleSheet("background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; font-weight: bold; border-radius: 4px; padding: 4px 10px;")
         self.btn_mark_out.clicked.connect(self._trigger_mark_out)
 
         btn_bar.addWidget(self.btn_play)

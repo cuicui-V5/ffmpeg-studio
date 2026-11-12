@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
             f"推荐编码器: {best_enc}"
         )
         lbl_info = QLabel(status_text)
-        lbl_info.setStyleSheet("padding-left: 10px; color: #abb2bf; font-size: 12px;")
+        lbl_info.setStyleSheet("padding-left: 10px; color: #64748b; font-size: 12px; font-weight: 500;")
         self.status_bar.addWidget(lbl_info)
 
     def dragEnterEvent(self, event):

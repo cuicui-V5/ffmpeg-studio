@@ -64,18 +64,18 @@ class RangeSlider(QWidget):
         track_h = 6
 
         # 1. 轨道底色
-        painter.setPen(QPen(QColor("#3e4451"), 1))
-        painter.setBrush(QBrush(QColor("#21252b")))
+        painter.setPen(QPen(QColor("#cbd5e1"), 1))
+        painter.setBrush(QBrush(QColor("#e2e8f0")))
         painter.drawRoundedRect(QRectF(margin, track_y, w - 2 * margin, track_h), 3, 3)
 
         # 2. 选中裁切区间高亮色
         x_start = self._val_to_x(self.start_val)
         x_end = self._val_to_x(self.end_val)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(0, 180, 216, 180)))
+        painter.setBrush(QBrush(QColor("#3b82f6")))
         painter.drawRoundedRect(QRectF(x_start, track_y, max(2.0, x_end - x_start), track_h), 3, 3)
 
-        # 3. 绘制起点 Handle (Cyan)
+        # 3. 绘制起点 Handle (Blue)
         self._draw_handle(painter, x_start, is_start=True, is_active=(self._active_handle == 'start' or self._hover_handle == 'start'))
 
         # 4. 绘制终点 Handle (Red/Coral)
@@ -87,17 +87,17 @@ class RangeSlider(QWidget):
         y = (self.height() - hh) / 2
         rect = QRectF(center_x - hw / 2, y, hw, hh)
 
-        base_color = QColor("#00d2ff") if is_start else QColor("#e06c75")
+        base_color = QColor("#2563eb") if is_start else QColor("#ef4444")
         if is_active:
-            painter.setBrush(QBrush(base_color))
+            painter.setBrush(QBrush(base_color.darker(110)))
             painter.setPen(QPen(QColor("#ffffff"), 2))
         else:
-            painter.setBrush(QBrush(base_color.darker(120)))
-            painter.setPen(QPen(base_color, 1))
+            painter.setBrush(QBrush(base_color))
+            painter.setPen(QPen(QColor("#ffffff"), 1.5))
 
         painter.drawRoundedRect(rect, 4, 4)
 
-        # 绘制标志 [ 或 ]
+        # 绘制标志 ▶ 或 ◀
         painter.setPen(QPen(QColor("#ffffff"), 1.5))
         font = QFont("Consolas", 9, QFont.Bold)
         painter.setFont(font)

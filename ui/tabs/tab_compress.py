@@ -79,7 +79,7 @@ class TabCompress(QWidget):
         self.btn_batch_date.clicked.connect(self._batch_fill_date)
 
         lbl_tips = QLabel("双击表格单元格可修改日期或GPS坐标")
-        lbl_tips.setStyleSheet("color: #8a919e; font-size: 12px;")
+        lbl_tips.setStyleSheet("color: #64748b; font-size: 12px;")
 
         meta_bar.addWidget(self.btn_batch_gps)
         meta_bar.addWidget(self.btn_batch_date)
@@ -112,9 +112,9 @@ class TabCompress(QWidget):
         cur_layout = QVBoxLayout()
         cur_header = QHBoxLayout()
         self.lbl_cur_title = QLabel("当前文件: 等待开始")
-        self.lbl_cur_title.setStyleSheet("font-weight: bold; color: #00d2ff;")
+        self.lbl_cur_title.setStyleSheet("font-weight: 600; color: #2563eb;")
         self.lbl_cur_stats = QLabel("进度: 0.0%  |  速率: --  |  帧率: -- fps  |  预计剩余: --:--")
-        self.lbl_cur_stats.setStyleSheet("color: #abb2bf; font-family: Consolas, monospace; font-size: 12px;")
+        self.lbl_cur_stats.setStyleSheet("color: #64748b; font-family: Consolas, monospace; font-size: 12px;")
         cur_header.addWidget(self.lbl_cur_title)
         cur_header.addStretch()
         cur_header.addWidget(self.lbl_cur_stats)
@@ -128,7 +128,7 @@ class TabCompress(QWidget):
         # 总任务进度
         prog_layout = QHBoxLayout()
         self.lbl_overall = QLabel("总进度: 0 / 0")
-        self.lbl_overall.setStyleSheet("font-weight: bold;")
+        self.lbl_overall.setStyleSheet("font-weight: 600; color: #0f172a;")
         self.prog_overall = QProgressBar()
         self.prog_overall.setValue(0)
         prog_layout.addWidget(self.lbl_overall)
@@ -137,7 +137,7 @@ class TabCompress(QWidget):
 
         action_layout = QHBoxLayout()
         self.lbl_status_desc = QLabel("准备就绪")
-        self.lbl_status_desc.setStyleSheet("color: #00d2ff;")
+        self.lbl_status_desc.setStyleSheet("color: #2563eb; font-weight: 500;")
 
         self.btn_start = QPushButton("开始压制")
         self.btn_start.setObjectName("primaryBtn")
@@ -253,24 +253,24 @@ class TabCompress(QWidget):
             # 拍摄日期
             date_item = QTableWidgetItem(item.final_date or "缺失")
             if item.date_source == 'exif':
-                date_item.setForeground(QColor("#98c379"))
+                date_item.setForeground(QColor("#16a34a"))
             elif item.date_source == 'filename':
-                date_item.setForeground(QColor("#e5c07b"))
+                date_item.setForeground(QColor("#d97706"))
             elif item.date_source == 'user':
-                date_item.setForeground(QColor("#61afef"))
+                date_item.setForeground(QColor("#2563eb"))
             else:
-                date_item.setForeground(QColor("#e06c75"))
+                date_item.setForeground(QColor("#dc2626"))
             self.table.setItem(row, 4, date_item)
 
             # GPS
             gps_str = f"{item.final_lat:.4f}, {item.final_lon:.4f}" if (item.final_lat is not None and item.final_lon is not None) else "缺失"
             gps_item = QTableWidgetItem(gps_str)
             if item.gps_source in ['exif', 'user_copy']:
-                gps_item.setForeground(QColor("#98c379"))
+                gps_item.setForeground(QColor("#16a34a"))
             elif item.gps_source == 'user':
-                gps_item.setForeground(QColor("#61afef"))
+                gps_item.setForeground(QColor("#2563eb"))
             else:
-                gps_item.setForeground(QColor("#e06c75"))
+                gps_item.setForeground(QColor("#dc2626"))
             self.table.setItem(row, 5, gps_item)
 
             self.table.setItem(row, 6, QTableWidgetItem(item.status))

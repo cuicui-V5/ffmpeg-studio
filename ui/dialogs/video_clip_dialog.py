@@ -44,7 +44,7 @@ class VideoClipDialog(QDialog):
         # 右侧：控制与参数卡片 (直接使用已有的 item 元数据，0ms 瞬时渲染)
         control_card = QFrame()
         control_card.setObjectName("dialogControlCard")
-        control_card.setStyleSheet("QFrame#dialogControlCard { background-color: #1e2025; border-radius: 6px; }")
+        control_card.setStyleSheet("QFrame#dialogControlCard { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; }")
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(14, 14, 14, 14)
         control_layout.setSpacing(12)
@@ -100,7 +100,7 @@ class VideoClipDialog(QDialog):
 
         # 关键帧对齐状态指示
         self.lbl_snap_result = QLabel("关键帧自动对齐已就绪")
-        self.lbl_snap_result.setStyleSheet("color: #00d2ff; font-weight: bold; font-family: Consolas; font-size: 12px;")
+        self.lbl_snap_result.setStyleSheet("color: #2563eb; font-weight: 600; font-family: Consolas, monospace; font-size: 12px;")
         time_layout.addWidget(self.lbl_snap_result)
 
         control_layout.addWidget(group_time)

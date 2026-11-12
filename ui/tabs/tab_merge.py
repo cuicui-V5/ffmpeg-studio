@@ -168,13 +168,13 @@ class TabMerge(QWidget):
 
         # 统计信息
         self.lbl_summary = QLabel("统计: 暂无待合并文件")
-        self.lbl_summary.setStyleSheet("color: #abb2bf; font-weight: bold; font-size: 12px;")
+        self.lbl_summary.setStyleSheet("color: #475569; font-weight: 600; font-size: 12px;")
         bottom_layout.addWidget(self.lbl_summary)
 
         # 输出目标文件配置
         out_layout = QHBoxLayout()
         lbl_out = QLabel("输出文件:")
-        lbl_out.setStyleSheet("font-weight: bold; color: #abb2bf;")
+        lbl_out.setStyleSheet("font-weight: 600; color: #475569;")
         self.edit_output = QLineEdit()
         self.edit_output.setPlaceholderText("添加视频后自动生成默认输出路径...")
         self.edit_output.textChanged.connect(self._on_output_path_edited)
@@ -188,9 +188,9 @@ class TabMerge(QWidget):
         # 进度条与状态
         prog_header = QHBoxLayout()
         self.lbl_prog_title = QLabel("合并进度: 等待开始")
-        self.lbl_prog_title.setStyleSheet("font-weight: bold; color: #00d2ff;")
+        self.lbl_prog_title.setStyleSheet("font-weight: 600; color: #2563eb;")
         self.lbl_prog_stats = QLabel("进度: 0.0%  |  速率: --  |  预计剩余: --:--")
-        self.lbl_prog_stats.setStyleSheet("color: #abb2bf; font-family: Consolas, monospace; font-size: 12px;")
+        self.lbl_prog_stats.setStyleSheet("color: #64748b; font-family: Consolas, monospace; font-size: 12px;")
         prog_header.addWidget(self.lbl_prog_title)
         prog_header.addStretch()
         prog_header.addWidget(self.lbl_prog_stats)
@@ -203,7 +203,7 @@ class TabMerge(QWidget):
         # 按钮操作栏
         action_layout = QHBoxLayout()
         self.lbl_exec_status = QLabel("准备就绪")
-        self.lbl_exec_status.setStyleSheet("color: #98c379;")
+        self.lbl_exec_status.setStyleSheet("color: #16a34a; font-weight: 500;")
 
         self.btn_open_dir = QPushButton("打开输出目录")
         self.btn_open_dir.clicked.connect(self._open_output_dir)
@@ -229,24 +229,24 @@ class TabMerge(QWidget):
     def _apply_banner_style(self, state: str):
         if state == "success":
             self.card_status.setStyleSheet(
-                "QFrame#cardStatus { background-color: #1a2e22; border: 1px solid #98c379; border-radius: 6px; }"
+                "QFrame#cardStatus { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; }"
             )
-            self.lbl_status_text.setStyleSheet("color: #98c379; font-size: 13px; font-weight: bold;")
+            self.lbl_status_text.setStyleSheet("color: #15803d; font-size: 13px; font-weight: 600;")
         elif state == "warning":
             self.card_status.setStyleSheet(
-                "QFrame#cardStatus { background-color: #38241e; border: 1px solid #e5c07b; border-radius: 6px; }"
+                "QFrame#cardStatus { background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; }"
             )
-            self.lbl_status_text.setStyleSheet("color: #e5c07b; font-size: 13px; font-weight: bold;")
+            self.lbl_status_text.setStyleSheet("color: #b45309; font-size: 13px; font-weight: 600;")
         elif state == "error":
             self.card_status.setStyleSheet(
-                "QFrame#cardStatus { background-color: #381e23; border: 1px solid #e06c75; border-radius: 6px; }"
+                "QFrame#cardStatus { background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; }"
             )
-            self.lbl_status_text.setStyleSheet("color: #e06c75; font-size: 13px; font-weight: bold;")
+            self.lbl_status_text.setStyleSheet("color: #b91c1c; font-size: 13px; font-weight: 600;")
         else: # neutral
             self.card_status.setStyleSheet(
-                "QFrame#cardStatus { background-color: #21252b; border: 1px solid #3e4451; border-radius: 6px; }"
+                "QFrame#cardStatus { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }"
             )
-            self.lbl_status_text.setStyleSheet("color: #abb2bf; font-size: 13px;")
+            self.lbl_status_text.setStyleSheet("color: #475569; font-size: 13px; font-weight: 500;")
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -541,7 +541,7 @@ class TabMerge(QWidget):
             size_item = QTableWidgetItem(size_str)
             size_item.setTextAlignment(Qt.AlignCenter)
             if item.is_cropped:
-                size_item.setForeground(QColor("#00d2ff"))
+                size_item.setForeground(QColor("#2563eb"))
                 size_item.setToolTip("裁剪预估大小")
             self.table.setItem(row, 7, size_item)
 
@@ -551,27 +551,27 @@ class TabMerge(QWidget):
                 e_fmt = KeyframeHelper.format_time(item.crop_end, show_ms=False)
                 crop_txt = f"{s_fmt} - {e_fmt}"
                 crop_item = QTableWidgetItem(crop_txt)
-                crop_item.setForeground(QColor("#00d2ff"))
+                crop_item.setForeground(QColor("#2563eb"))
                 crop_item.setToolTip(
                     f"裁剪设定: {item.crop_start:.2f}s 至 {item.crop_end:.2f}s\n"
                     f"关键帧吸附: {item.snapped_start:.2f}s 至 {item.snapped_end:.2f}s"
                 )
             else:
                 crop_item = QTableWidgetItem("全片 (未裁剪)")
-                crop_item.setForeground(QColor("#5c6370"))
+                crop_item.setForeground(QColor("#64748b"))
             crop_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 8, crop_item)
 
             # 9. 状态
             if row == 0:
                 status_item = QTableWidgetItem("基准参考")
-                status_item.setForeground(QColor("#00d2ff"))
+                status_item.setForeground(QColor("#2563eb"))
             elif item.is_consistent:
                 status_item = QTableWidgetItem("一致")
-                status_item.setForeground(QColor("#98c379"))
+                status_item.setForeground(QColor("#16a34a"))
             else:
                 status_item = QTableWidgetItem("存在差异")
-                status_item.setForeground(QColor("#e06c75"))
+                status_item.setForeground(QColor("#dc2626"))
                 status_item.setToolTip("\n".join(item.mismatched_reasons))
             status_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 9, status_item)
@@ -581,15 +581,15 @@ class TabMerge(QWidget):
             btn_clip.setCursor(Qt.PointingHandCursor)
             if item.is_cropped:
                 btn_clip.setStyleSheet(
-                    "QPushButton { background-color: #1a2e22; color: #98c379; border: 1px solid #98c379; "
+                    "QPushButton { background-color: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; "
                     "border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; } "
-                    "QPushButton:hover { background-color: #264532; }"
+                    "QPushButton:hover { background-color: #d1fae5; }"
                 )
             else:
                 btn_clip.setStyleSheet(
-                    "QPushButton { background-color: #282c34; color: #abb2bf; border: 1px solid #3e4451; "
+                    "QPushButton { background-color: #f8fafc; color: #475569; border: 1px solid #cbd5e1; "
                     "border-radius: 4px; padding: 2px 8px; font-size: 11px; } "
-                    "QPushButton:hover { background-color: #353b45; color: #ffffff; }"
+                    "QPushButton:hover { background-color: #f1f5f9; color: #0f172a; }"
                 )
             btn_clip.clicked.connect(lambda checked, it=item: self._open_clip_dialog(it))
             self.table.setCellWidget(row, 10, btn_clip)

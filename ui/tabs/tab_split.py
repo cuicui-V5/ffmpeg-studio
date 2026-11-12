@@ -103,7 +103,7 @@ class TabSplit(QWidget):
         cur_layout = QVBoxLayout()
         cur_header = QHBoxLayout()
         self.lbl_cur_split = QLabel("当前文件: 等待开始")
-        self.lbl_cur_split.setStyleSheet("font-weight: bold; color: #00d2ff;")
+        self.lbl_cur_split.setStyleSheet("font-weight: 600; color: #2563eb;")
         cur_header.addWidget(self.lbl_cur_split)
         cur_layout.addLayout(cur_header)
 
@@ -233,11 +233,11 @@ class TabSplit(QWidget):
 
             if not plan.needs_split:
                 res_item = QTableWidgetItem("符合限制")
-                res_item.setForeground(QColor("#98c379"))
+                res_item.setForeground(QColor("#16a34a"))
                 plan_desc = "保留原样，直接无损复制"
             else:
                 res_item = QTableWidgetItem(f"需拆分: {plan.part_count} 段")
-                res_item.setForeground(QColor("#e5c07b"))
+                res_item.setForeground(QColor("#d97706"))
                 plan_desc = f"每段限时约 {KeyframeHelper.format_time(plan.split_time, show_ms=False)}，预估单段约 {plan.avg_part_size / (1024*1024):.1f} MB"
 
             self.table.setItem(row, 3, res_item)

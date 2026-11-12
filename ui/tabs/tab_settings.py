@@ -47,7 +47,7 @@ class TabSettings(QWidget):
         group_hw = QGroupBox("显卡硬件加速诊断")
         hw_layout = QVBoxLayout(group_hw)
         self.lbl_hw_desc = QLabel("正在检测显卡驱动与编码支持...")
-        self.lbl_hw_desc.setStyleSheet("font-family: Consolas; line-height: 1.5; color: #abb2bf;")
+        self.lbl_hw_desc.setStyleSheet("font-family: Consolas, monospace; line-height: 1.5; color: #1e293b;")
         hw_layout.addWidget(self.lbl_hw_desc)
 
         hw_btn_bar = QHBoxLayout()
@@ -92,7 +92,7 @@ class TabSettings(QWidget):
             self.table_tools.setItem(row, 0, QTableWidgetItem(name))
             
             status_item = QTableWidgetItem("已就绪" if is_ok else "未找到")
-            status_item.setForeground(QColor("#98c379") if is_ok else QColor("#e06c75"))
+            status_item.setForeground(QColor("#16a34a") if is_ok else QColor("#dc2626"))
             self.table_tools.setItem(row, 1, status_item)
 
             self.table_tools.setItem(row, 2, QTableWidgetItem("检测中..."))
@@ -121,7 +121,7 @@ class TabSettings(QWidget):
             self.table_tools.setItem(row, 0, QTableWidgetItem(name))
             is_ok = info["available"]
             status_item = QTableWidgetItem("已就绪" if is_ok else "未找到")
-            status_item.setForeground(QColor("#98c379") if is_ok else QColor("#e06c75"))
+            status_item.setForeground(QColor("#16a34a") if is_ok else QColor("#dc2626"))
             self.table_tools.setItem(row, 1, status_item)
 
             self.table_tools.setItem(row, 2, QTableWidgetItem(info.get("version", "已就绪")))
