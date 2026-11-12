@@ -26,12 +26,12 @@ class VideoCanvas(QLabel):
         self.setText("")
         self._update_display()
 
-    def show_loading(self, text: str = "正在载入视频画面与时间轴..."):
+    def show_loading(self, text: str = "正在载入视频..."):
         self._current_pixmap = None
         self.setPixmap(QPixmap())
         self.setText(text)
         self.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #38bdf8; font-size: 14px; font-weight: bold;"
+            "background-color: #0f172a; border: 1px solid #e2e8f0; border-radius: 8px; color: #94a3b8; font-size: 13px;"
         )
 
     def resizeEvent(self, event):
@@ -120,25 +120,6 @@ class VideoPlayerWidget(QWidget):
         # 1. 视频视口
         self.canvas = VideoCanvas()
         layout.addWidget(self.canvas, stretch=1)
-
-        # 加载进度指示条 (细条动画，默认隐藏)
-        self.loading_bar = QProgressBar()
-        self.loading_bar.setFixedHeight(3)
-        self.loading_bar.setTextVisible(False)
-        self.loading_bar.setRange(0, 0)
-        self.loading_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #e2e8f0;
-                border: none;
-                border-radius: 1px;
-            }
-            QProgressBar::chunk {
-                background-color: #2563eb;
-                border-radius: 1px;
-            }
-        """)
-        self.loading_bar.hide()
-        layout.addWidget(self.loading_bar)
 
         # 2. 控制面板卡片
         control_card = QFrame()
@@ -251,8 +232,7 @@ class VideoPlayerWidget(QWidget):
 
         self.current_file = file_path
         self._initial_range = initial_range
-        self.canvas.show_loading("正在载入视频画面与时间轴...")
-        self.loading_bar.show()
+        self.canvas.show_loading("正在载入视频...")
 
         self._on_loaded_callback = on_loaded
         self._load_worker = VideoLoadWorker(file_path, self)
@@ -261,7 +241,6 @@ class VideoPlayerWidget(QWidget):
         self._load_worker.start()
 
     def _on_async_loaded(self, container, stream, dur, fps):
-        self.loading_bar.hide()
         self.container = container
         self.video_stream = stream
         if dur <= 0:
@@ -290,7 +269,6 @@ class VideoPlayerWidget(QWidget):
             cb()
 
     def _on_async_failed(self, err_msg: str):
-        self.loading_bar.hide()
         self.canvas.setText(f"视频加载失败: {err_msg}")
         self.canvas.setStyleSheet("background-color: #0b0c0e; border-radius: 6px; color: #e06c75; font-size: 13px;")
 

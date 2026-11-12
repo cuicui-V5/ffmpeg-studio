@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QListWidget, QAbstractItemView, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPainter, QColor, QFont
 
 from core.bgm_helper import BgmConfig, AUDIO_EXTENSIONS
 
@@ -68,6 +69,14 @@ class AudioListWidget(QListWidget):
             event.acceptProposedAction()
         else:
             event.ignore()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.count() == 0:
+            painter = QPainter(self.viewport())
+            painter.setPen(QColor("#94a3b8"))
+            painter.setFont(QFont("Microsoft YaHei", 9))
+            painter.drawText(self.viewport().rect(), Qt.AlignCenter, "拖入音频文件至此处，或点击下方添加")
 
 class BgmWidget(QFrame):
     """优雅浅色折叠式背景音乐配置组件 (默认折叠，紧凑美观)"""
@@ -160,18 +169,16 @@ class BgmWidget(QFrame):
         sep.setStyleSheet("color: #f1f5f9; background-color: #f1f5f9; height: 1px; border: none;")
         body_layout.addWidget(sep)
 
-        # 音频列表与操作按钮
-        list_box = QHBoxLayout()
-        list_box.setSpacing(8)
-
+        # 音频列表 (完整卡片宽度展示，杜绝横向挤压)
         self.audio_list = AudioListWidget()
-        self.audio_list.setFixedHeight(75)
+        self.audio_list.setFixedHeight(64)
         self.audio_list.files_dropped.connect(self._add_audio_paths)
-        list_box.addWidget(self.audio_list, stretch=1)
+        body_layout.addWidget(self.audio_list)
 
-        btn_vbox = QVBoxLayout()
-        btn_vbox.setSpacing(5)
-        
+        # 操作按钮工具栏 (水平排布，不挤压高度)
+        btn_bar = QHBoxLayout()
+        btn_bar.setSpacing(6)
+
         self.btn_add = QPushButton("添加音频")
         self.btn_add.setFixedHeight(26)
         self.btn_add.setCursor(Qt.PointingHandCursor)
@@ -187,76 +194,90 @@ class BgmWidget(QFrame):
         self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.clicked.connect(self._clear_audios)
 
-        btn_vbox.addWidget(self.btn_add)
-        btn_vbox.addWidget(self.btn_remove)
-        btn_vbox.addWidget(self.btn_clear)
-        list_box.addLayout(btn_vbox)
-        body_layout.addLayout(list_box)
+        btn_bar.addWidget(self.btn_add, stretch=1)
+        btn_bar.addWidget(self.btn_remove)
+        btn_bar.addWidget(self.btn_clear)
+        body_layout.addLayout(btn_bar)
 
-        # 播放参数控制 (音量滑块、循环模式、播放顺序)
-        grid_layout = QGridLayout()
-        grid_layout.setContentsMargins(2, 2, 2, 2)
-        grid_layout.setHorizontalSpacing(14)
-        grid_layout.setVerticalSpacing(8)
+        # 音量滑块控制行 (每个滑块独占一行，保证滑轨充足宽度，杜绝被挤压成圆点)
+        vol_layout = QVBoxLayout()
+        vol_layout.setSpacing(6)
 
         # 音乐音量
+        bgm_box = QHBoxLayout()
+        bgm_box.setSpacing(8)
         lbl_bgm_vol = QLabel("音乐音量:")
+        lbl_bgm_vol.setFixedWidth(56)
         lbl_bgm_vol.setStyleSheet("color: #475569; font-size: 12px; font-weight: 500;")
         self.slider_bgm = QSlider(Qt.Horizontal)
         self.slider_bgm.setRange(0, 200)
         self.slider_bgm.setValue(100)
         self.slider_bgm.setFixedHeight(18)
         self.lbl_bgm_val = QLabel("100%")
-        self.lbl_bgm_val.setFixedWidth(42)
+        self.lbl_bgm_val.setFixedWidth(40)
+        self.lbl_bgm_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.lbl_bgm_val.setStyleSheet("color: #2563eb; font-weight: bold; font-family: Consolas, monospace; font-size: 12px;")
         self.slider_bgm.valueChanged.connect(self._on_bgm_vol_changed)
-
-        # 循环模式 (高度充足，内边距宽裕，杜绝文字显示一半)
-        lbl_loop = QLabel("循环模式:")
-        lbl_loop.setStyleSheet("color: #475569; font-size: 12px; font-weight: 500;")
-        self.combo_loop = QComboBox()
-        self.combo_loop.setFixedHeight(28)
-        self.combo_loop.setMinimumWidth(110)
-        self.combo_loop.addItems(["无限循环", "播放一次"])
-        self.combo_loop.currentIndexChanged.connect(self._on_param_changed)
+        bgm_box.addWidget(lbl_bgm_vol)
+        bgm_box.addWidget(self.slider_bgm, stretch=1)
+        bgm_box.addWidget(self.lbl_bgm_val)
+        vol_layout.addLayout(bgm_box)
 
         # 原声音量
+        orig_box = QHBoxLayout()
+        orig_box.setSpacing(8)
         lbl_orig_vol = QLabel("原声音量:")
+        lbl_orig_vol.setFixedWidth(56)
         lbl_orig_vol.setStyleSheet("color: #475569; font-size: 12px; font-weight: 500;")
         self.slider_orig = QSlider(Qt.Horizontal)
         self.slider_orig.setRange(0, 200)
         self.slider_orig.setValue(100)
         self.slider_orig.setFixedHeight(18)
         self.lbl_orig_val = QLabel("100%")
-        self.lbl_orig_val.setFixedWidth(42)
+        self.lbl_orig_val.setFixedWidth(40)
+        self.lbl_orig_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.lbl_orig_val.setStyleSheet("color: #2563eb; font-weight: bold; font-family: Consolas, monospace; font-size: 12px;")
         self.slider_orig.valueChanged.connect(self._on_orig_vol_changed)
+        orig_box.addWidget(lbl_orig_vol)
+        orig_box.addWidget(self.slider_orig, stretch=1)
+        orig_box.addWidget(self.lbl_orig_val)
+        vol_layout.addLayout(orig_box)
+
+        body_layout.addLayout(vol_layout)
+
+        # 模式选择行 (循环模式与播放顺序并排排布，左右各 50%)
+        mode_box = QHBoxLayout()
+        mode_box.setSpacing(8)
+
+        # 循环模式
+        loop_sub = QHBoxLayout()
+        loop_sub.setSpacing(4)
+        lbl_loop = QLabel("循环:")
+        lbl_loop.setFixedWidth(32)
+        lbl_loop.setStyleSheet("color: #475569; font-size: 12px; font-weight: 500;")
+        self.combo_loop = QComboBox()
+        self.combo_loop.setFixedHeight(28)
+        self.combo_loop.addItems(["无限循环", "播放一次"])
+        self.combo_loop.currentIndexChanged.connect(self._on_param_changed)
+        loop_sub.addWidget(lbl_loop)
+        loop_sub.addWidget(self.combo_loop, stretch=1)
+        mode_box.addLayout(loop_sub, stretch=1)
 
         # 播放顺序
-        lbl_order = QLabel("播放顺序:")
+        order_sub = QHBoxLayout()
+        order_sub.setSpacing(4)
+        lbl_order = QLabel("顺序:")
+        lbl_order.setFixedWidth(32)
         lbl_order.setStyleSheet("color: #475569; font-size: 12px; font-weight: 500;")
         self.combo_order = QComboBox()
         self.combo_order.setFixedHeight(28)
-        self.combo_order.setMinimumWidth(110)
         self.combo_order.addItems(["顺序播放", "随机播放"])
         self.combo_order.currentIndexChanged.connect(self._on_param_changed)
+        order_sub.addWidget(lbl_order)
+        order_sub.addWidget(self.combo_order, stretch=1)
+        mode_box.addLayout(order_sub, stretch=1)
 
-        # 网格排布
-        grid_layout.addWidget(lbl_bgm_vol, 0, 0)
-        grid_layout.addWidget(self.slider_bgm, 0, 1)
-        grid_layout.addWidget(self.lbl_bgm_val, 0, 2)
-        grid_layout.addWidget(lbl_loop, 0, 3)
-        grid_layout.addWidget(self.combo_loop, 0, 4)
-
-        grid_layout.addWidget(lbl_orig_vol, 1, 0)
-        grid_layout.addWidget(self.slider_orig, 1, 1)
-        grid_layout.addWidget(self.lbl_orig_val, 1, 2)
-        grid_layout.addWidget(lbl_order, 1, 3)
-        grid_layout.addWidget(self.combo_order, 1, 4)
-
-        grid_layout.setColumnStretch(1, 1)
-        grid_layout.setColumnStretch(4, 0)
-        body_layout.addLayout(grid_layout)
+        body_layout.addLayout(mode_box)
 
         card_layout.addWidget(self.body_widget)
 

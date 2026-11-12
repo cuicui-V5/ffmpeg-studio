@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QGroupBox, QFileDialog,
-    QMessageBox, QSplitter, QFrame, QProgressBar
+    QMessageBox, QSplitter, QFrame, QProgressBar, QScrollArea
 )
 from PySide6.QtCore import Qt
 
@@ -54,34 +54,55 @@ class TabCutter(QWidget):
         player_layout.addWidget(self.player_widget)
         splitter.addWidget(player_container)
 
-        # 右侧：裁切参数与控制
+        # 右侧：使用 QScrollArea 容器包裹控制卡片，自适应任意分辨率，展开折叠时绝不挤压控件
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("cutterScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea#cutterScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea#cutterScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+        """)
+
         control_card = QFrame()
         control_card.setObjectName("cutterControlCard")
         control_card.setStyleSheet("QFrame#cutterControlCard { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; }")
+        control_card.setMinimumWidth(330)
         control_layout = QVBoxLayout(control_card)
-        control_layout.setContentsMargins(14, 14, 14, 14)
-        control_layout.setSpacing(12)
+        control_layout.setContentsMargins(12, 12, 12, 12)
+        control_layout.setSpacing(10)
 
         # 视频信息
         self.group_info = QGroupBox("视频属性")
         info_layout = QVBoxLayout(self.group_info)
-        self.lbl_video_meta = QLabel("分辨率: --\n编码: --\n时长: --\n大小: --\n关键帧数量: 0")
-        self.lbl_video_meta.setStyleSheet("font-family: Consolas, monospace; line-height: 1.4;")
+        info_layout.setContentsMargins(10, 8, 10, 8)
+        self.lbl_video_meta = QLabel("分辨率: --  |  编码: --\n时长: --  |  大小: --\n关键帧对齐: 已就绪")
+        self.lbl_video_meta.setStyleSheet("font-family: Consolas, monospace; line-height: 1.35; font-size: 12px; color: #334155;")
         info_layout.addWidget(self.lbl_video_meta)
         control_layout.addWidget(self.group_info)
 
         # 时间截取设置
         group_time = QGroupBox("裁剪区间")
         time_layout = QVBoxLayout(group_time)
-        time_layout.setSpacing(10)
+        time_layout.setContentsMargins(10, 8, 10, 8)
+        time_layout.setSpacing(8)
 
         # 起始时间
         in_layout = QHBoxLayout()
         lbl_start = QLabel("起始时间:")
-        lbl_start.setFixedWidth(70)
+        lbl_start.setFixedWidth(64)
         self.edit_start = QLineEdit("00:00:00.00")
+        self.edit_start.setFixedHeight(28)
         self.edit_start.textChanged.connect(self._update_snap_preview)
         btn_set_in = QPushButton("当前时间")
+        btn_set_in.setFixedHeight(28)
         btn_set_in.clicked.connect(lambda: self._on_player_mark_in(self.player_widget.get_current_seconds()))
         in_layout.addWidget(lbl_start)
         in_layout.addWidget(self.edit_start, stretch=1)
@@ -91,10 +112,12 @@ class TabCutter(QWidget):
         # 结束时间
         out_layout = QHBoxLayout()
         lbl_end = QLabel("结束时间:")
-        lbl_end.setFixedWidth(70)
+        lbl_end.setFixedWidth(64)
         self.edit_end = QLineEdit("00:00:00.00")
+        self.edit_end.setFixedHeight(28)
         self.edit_end.textChanged.connect(self._update_snap_preview)
         btn_set_out = QPushButton("当前时间")
+        btn_set_out.setFixedHeight(28)
         btn_set_out.clicked.connect(lambda: self._on_player_mark_out(self.player_widget.get_current_seconds()))
         out_layout.addWidget(lbl_end)
         out_layout.addWidget(self.edit_end, stretch=1)
@@ -116,22 +139,23 @@ class TabCutter(QWidget):
         # 导出操作与独立单文件进度
         action_box = QGroupBox("执行操作")
         action_layout = QVBoxLayout(action_box)
-        action_layout.setSpacing(8)
+        action_layout.setContentsMargins(10, 8, 10, 8)
+        action_layout.setSpacing(6)
 
         self.lbl_cut_status = QLabel("就绪")
         self.lbl_cut_status.setStyleSheet("color: #64748b; font-size: 12px;")
 
         self.prog_cut = QProgressBar()
         self.prog_cut.setValue(0)
-        self.prog_cut.setFixedHeight(18)
+        self.prog_cut.setFixedHeight(16)
 
         self.btn_cut = QPushButton("开始裁剪")
         self.btn_cut.setObjectName("primaryBtn")
-        self.btn_cut.setFixedHeight(40)
+        self.btn_cut.setFixedHeight(38)
         self.btn_cut.clicked.connect(self._start_cut)
 
         self.btn_open_folder = QPushButton("打开输出目录")
-        self.btn_open_folder.setFixedHeight(34)
+        self.btn_open_folder.setFixedHeight(32)
         self.btn_open_folder.clicked.connect(self._open_output_dir)
 
         action_layout.addWidget(self.lbl_cut_status)
@@ -140,9 +164,11 @@ class TabCutter(QWidget):
         action_layout.addWidget(self.btn_open_folder)
         control_layout.addWidget(action_box)
 
-        splitter.addWidget(control_card)
+        scroll_area.setWidget(control_card)
+        splitter.addWidget(scroll_area)
         splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([750, 360])
         layout.addWidget(splitter, stretch=1)
 
     def dragEnterEvent(self, event):
@@ -182,10 +208,8 @@ class TabCutter(QWidget):
 
         fps_val = meta.get("fps", 0.0)
         self.lbl_video_meta.setText(
-            f"分辨率: {meta.get('width', 0)}x{meta.get('height', 0)}\n"
-            f"编码格式: {meta.get('codec', 'unknown')} ({fps_val:.1f} fps)\n"
-            f"视频时长: {dur_str} ({self.total_duration:.2f} 秒)\n"
-            f"文件大小: {size_str}\n"
+            f"分辨率: {meta.get('width', 0)}x{meta.get('height', 0)}  |  编码: {meta.get('codec', 'unknown')} ({fps_val:.1f} fps)\n"
+            f"时长: {dur_str} ({self.total_duration:.2f}s)  |  大小: {size_str}\n"
             f"关键帧对齐: 已就绪"
         )
 
